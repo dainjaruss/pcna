@@ -1,0 +1,74 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Source {
+  id               String    @id @default(cuid())
+  name             String    @unique
+  url              String
+  enabled          Boolean   @default(true)
+  credibilityRating Int      @default(5) // 1-10 scale
+  type             String    @default("rss") // rss, scrape, api
+  rssUrl           String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  articles         Article[]
+  
+  @@index([enabled])
+}
+
+model Article {
+  id                String       @id @default(cuid())
+  title             String
+  summary           String       @db.Text
+  content           String?      @db.Text
+  url               String       @unique
+  imageUrl          String?
+  source            Source       @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  sourceId          String
+  credibilityRating Int          @default(5) // 1-10 scale
+  publishDate       DateTime
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  userRatings       UserRating[]
+  categories        String[]     @default([])
+  celebrities       String[]     @default([])
+  
+  @@index([publishDate(sort: Desc)])
+  @@index([sourceId])
+  @@index([createdAt(sort: Desc)])
+}
+
+model UserRating {
+  id        String   @id @default(cuid())
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  articleId String
+  rating    Int      // 1-5 stars or 1-10 scale
+  feedback  String?  // optional: like, dislike, etc.
+  createdAt DateTime @default(now())
+  
+  @@index([articleId])
+  @@index([rating])
+}
+
+model Setting {
+  id        String   @id @default(cuid())
+  key       String   @unique
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model EmailRecipient {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}

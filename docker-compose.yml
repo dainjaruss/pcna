@@ -1,0 +1,81 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Database
+  postgres:
+    image: postgres:16-alpine
+    container_name: popculture-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: popculture_db
+      POSTGRES_USER: popculture
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-popculture_password}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U popculture"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Next.js Application
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: popculture-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://popculture:${POSTGRES_PASSWORD:-popculture_password}@postgres:5432/popculture_db?schema=public
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
+      NODE_ENV: production
+      # Email settings
+      SMTP_HOST: ${SMTP_HOST}
+      SMTP_PORT: ${SMTP_PORT}
+      SMTP_USER: ${SMTP_USER}
+      SMTP_PASSWORD: ${SMTP_PASSWORD}
+      SMTP_FROM: ${SMTP_FROM}
+      # OR SendGrid
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY}
+      SENDGRID_FROM: ${SENDGRID_FROM}
+      # App settings
+      DAILY_EMAIL_TIME: ${DAILY_EMAIL_TIME:-08:00}
+      REFRESH_INTERVAL: ${REFRESH_INTERVAL:-6}
+      DEFAULT_EMAIL_RECIPIENTS: ${DEFAULT_EMAIL_RECIPIENTS}
+      # Cron and API security
+      USE_BUILTIN_CRON: ${USE_BUILTIN_CRON:-false}
+      API_KEY: ${API_KEY}
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./prisma:/app/prisma
+    command: sh -c "npx prisma migrate deploy && node scripts/init-db.js && node server.js"
+
+  # Cron Jobs Service (Optional - only needed if USE_BUILTIN_CRON=true)
+  # If using n8n for scheduling, you can remove this service or leave it disabled
+  cron:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: popculture-cron
+    restart: unless-stopped
+    depends_on:
+      - app
+      - postgres
+    environment:
+      DATABASE_URL: postgresql://popculture:${POSTGRES_PASSWORD:-popculture_password}@postgres:5432/popculture_db?schema=public
+      NEXT_PUBLIC_APP_URL: http://app:3000
+      NODE_ENV: production
+      USE_BUILTIN_CRON: ${USE_BUILTIN_CRON:-false}
+    command: node scripts/cron-jobs.js
+    # Uncomment to disable cron service when using n8n
+    # profiles: ["disabled"]
+
+volumes:
+  postgres_data:
+    driver: local

@@ -1,0 +1,53 @@
+# Node
+node_modules/
+
+# Next.js build output
+.next/
+out/
+build/
+
+# Environment variables
+.env
+.env.local
+.env.production
+.env.*.local
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Editor directories and files
+.vscode/
+.idea/
+.DS_Store
+
+# TypeScript
+*.tsbuildinfo
+
+# Coverage
+coverage/
+
+# Docker
+docker-compose.override.yml
+
+# Misc
+Thumbs.db
+
+# Prisma
+/prisma/dev.db
+
+# Local sqlite db (if any)
+*.sqlite
+
+# Ignore local secrets
+.envrc
+
+# Ignore build artifacts
+dist/
+
+# Ignore lockfiles only if you intentionally don't want to track them (usually you do track them)
+# pnpm-lock.yaml
+# package-lock.json
