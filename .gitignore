@@ -48,6 +48,9 @@ Thumbs.db
 # Ignore build artifacts
 dist/
 
+# n8n workflow exports (may contain secrets)
+n8n/workflows/
+
 # Ignore lockfiles only if you intentionally don't want to track them (usually you do track them)
 # pnpm-lock.yaml
 # package-lock.json
