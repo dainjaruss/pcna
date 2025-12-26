@@ -176,7 +176,10 @@ export default function SettingsPage() {
     setFetchingNews(true)
     try {
       const response = await fetch('/api/cron/fetch-news', {
-        method: 'POST'
+        method: 'POST',
+        headers: {
+          'x-ui-trigger': 'true'
+        }
       })
 
       if (response.ok) {
