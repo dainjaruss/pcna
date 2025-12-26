@@ -12,10 +12,20 @@ const nextConfig = {
       },
     ],
   },
-  experimental: {
-    serverActions: true,
-  },
+  // Transpile modern ESM packages that use newer syntax (like `undici`/`cheerio`)
+  // so Next's build (SWC/webpack) can process them.
+  transpilePackages: ['cheerio', 'undici'],
   output: 'standalone',
 }
 
 module.exports = nextConfig
+
+// Treat certain modern ESM packages as externals during server webpack builds
+// so webpack doesn't attempt to parse unsupported syntax from those packages.
+module.exports.webpack = (config, { isServer }) => {
+  if (isServer) {
+    config.externals = config.externals || [];
+    config.externals.push(/undici/, /cheerio/);
+  }
+  return config;
+};

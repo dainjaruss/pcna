@@ -1,9 +1,9 @@
 # Updated from node:18-alpine to fix undici Node version requirement
-FROM node:20-alpine AS base
+FROM node:20-slim AS base
 
 # Install dependencies only when needed
 FROM base AS deps
-RUN apk add --no-cache libc6-compat
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 # Copy package files
@@ -12,7 +12,7 @@ RUN npm install --ignore-scripts  # Removed --production to include dev deps nee
 
 # Rebuild the source code only when needed
 FROM base AS builder
-RUN apk add --no-cache openssl  # Added for Prisma OpenSSL detection
+RUN apt-get update && apt-get install -y --no-install-recommends openssl ca-certificates libssl-dev && rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
@@ -26,6 +26,11 @@ RUN npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
+# Ensure runtime has OpenSSL/libssl for Prisma query engine
+RUN apt-get update \
+	&& apt-get install -y --no-install-recommends openssl ca-certificates libssl-dev \
+	|| true \
+	&& rm -rf /var/lib/apt/lists/*
 WORKDIR /app
 
 ENV NODE_ENV production
@@ -45,6 +50,10 @@ COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
 COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
 # Copy Prisma files
+# Copy full node_modules so runtime scripts have their dependencies
+COPY --from=builder --chown=nextjs:nodejs /app/node_modules ./node_modules
+
+# Copy Prisma-specific runtime files (kept for smaller delta and safety)
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder --chown=nextjs:nodejs /app/node_modules/@prisma ./node_modules/@prisma
 COPY --from=builder --chown=nextjs:nodejs /app/prisma ./prisma

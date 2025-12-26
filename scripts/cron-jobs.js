@@ -1,8 +1,8 @@
 // Cron job script to run scheduled tasks
 const cron = require('node-cron');
 const { PrismaClient } = require('@prisma/client');
-const { fetchAllNews } = require('../lib/news-fetcher');
-const { sendDailyEmailSummary } = require('../lib/email');
+// Note: avoid importing server-only TypeScript modules here to keep this script
+// runnable in the runtime image. Cron will call internal API endpoints instead.
 
 const prisma = new PrismaClient();
 
