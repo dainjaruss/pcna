@@ -3,6 +3,8 @@ import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
 import { comparePassword, signAccessToken, createRefreshTokenForUser, setAuthCookies } from '@/lib/auth'
 import { allowRequest, getRequestCount } from '@/lib/rate-limiter'
+import { sanitizeEmail, sanitizePassword } from '@/lib/sanitization'
+import { handleApiError } from '@/lib/error-handling'
 
 const bodySchema = z.object({
   email: z.string().email(),
@@ -18,9 +20,17 @@ export async function POST(req: Request) {
     const count = await getRequestCount(key)
     return NextResponse.json({ error: 'Too many login attempts, try again later', attempts: count }, { status: 429 })
   }
+
   try {
     const body = await req.json()
-    const parsed = bodySchema.parse(body)
+
+    // Sanitize inputs
+    const sanitizedBody = {
+      email: sanitizeEmail(body.email),
+      password: sanitizePassword(body.password)
+    };
+
+    const parsed = bodySchema.parse(sanitizedBody)
 
     const user = await prisma.user.findUnique({ where: { email: parsed.email } })
     if (!user) return NextResponse.json({ error: 'Invalid credentials' }, { status: 401 })
@@ -33,7 +43,7 @@ export async function POST(req: Request) {
     const res = NextResponse.json({ user: { id: user.id, email: user.email, name: user.name } })
     setAuthCookies(res, access, refreshToken, expiresAt)
     return res
-  } catch (err: any) {
-    return NextResponse.json({ error: err.message || 'Invalid request' }, { status: 400 })
+  } catch (error) {
+    return handleApiError(error, 'login')
   }
 }

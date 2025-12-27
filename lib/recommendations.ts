@@ -49,6 +49,15 @@ export async function getRecommendedArticles(
     },
     take: 100 // Consider last 100 ratings for preference learning
   });
+
+  // Get user interaction history for enhanced personalization
+  const userInteractions = await prisma.userInteraction.findMany({
+    where: userId ? { userId } : undefined,
+    orderBy: {
+      createdAt: 'desc'
+    },
+    take: 200 // Consider last 200 interactions
+  });
   
   // Build user preference profile
   const preferredCelebrities = new Map<string, number>();
@@ -86,6 +95,33 @@ export async function getRecommendedArticles(
       (preferredSources.get(rating.article.source.name) || 0) + weight
     );
   });
+
+  // Analyze user interaction patterns for enhanced personalization
+  const interactionPatterns = new Map<string, { views: number, clicks: number, avgDuration: number }>();
+  const articleInteractions = new Map<string, string[]>(); // articleId -> interaction types
+  
+  userInteractions.forEach(interaction => {
+    const key = `${interaction.articleId}`;
+    const patterns = interactionPatterns.get(key) || { views: 0, clicks: 0, avgDuration: 0 };
+    
+    if (interaction.interactionType === 'view') {
+      patterns.views++;
+      if (interaction.duration) {
+        patterns.avgDuration = (patterns.avgDuration + interaction.duration) / 2; // Simple average
+      }
+    } else if (interaction.interactionType === 'click') {
+      patterns.clicks++;
+    }
+    
+    interactionPatterns.set(key, patterns);
+    
+    // Track interaction types per article
+    const types = articleInteractions.get(interaction.articleId) || [];
+    if (!types.includes(interaction.interactionType)) {
+      types.push(interaction.interactionType);
+      articleInteractions.set(interaction.articleId, types);
+    }
+  });
   
   // Add explicit user preferences with high weight
   if (userSettings) {
@@ -109,6 +145,7 @@ export async function getRecommendedArticles(
   
   let articles = await prisma.article.findMany({
     where: {
+      archived: false,
       id: {
         notIn: ratedArticleIds.slice(0, 50) // Exclude recently rated articles
       }
@@ -134,6 +171,20 @@ export async function getRecommendedArticles(
       })
       .slice(offset, offset + limit)
       .map(a => ({ ...a, score: a.credibilityRating }));
+  }
+  
+  // Pre-calculate community interaction counts for all articles
+  const articleIds = articles.map(a => a.id);
+  const communityInteractionCounts = new Map<string, number>();
+  
+  for (const articleId of articleIds) {
+    const count = await prisma.userInteraction.count({
+      where: {
+        articleId,
+        interactionType: { in: ['view', 'click'] }
+      }
+    });
+    communityInteractionCounts.set(articleId, count);
   }
   
   // Score articles based on user preferences
@@ -173,6 +224,31 @@ export async function getRecommendedArticles(
     if (article.userRatings.length > 0) {
       const avgRating = article.userRatings.reduce((sum, r) => sum + r.rating, 0) / article.userRatings.length;
       score += (avgRating - 3) * 2; // +/- 4 points based on community rating
+    }
+    
+    // Interaction-based personalization (0-15 points)
+    const interactionData = interactionPatterns.get(article.id);
+    if (interactionData) {
+      // Boost articles user has viewed (shows interest)
+      if (interactionData.views > 0) {
+        score += Math.min(3, interactionData.views); // Up to +3 for multiple views
+      }
+      
+      // Boost articles user has clicked (shows strong interest)
+      if (interactionData.clicks > 0) {
+        score += Math.min(5, interactionData.clicks * 2); // Up to +5 for clicks
+      }
+      
+      // Boost articles where user spent time (engagement)
+      if (interactionData.avgDuration > 10) { // Spent more than 10 seconds
+        score += Math.min(7, interactionData.avgDuration / 10); // Up to +7 for engagement
+      }
+    }
+    
+    // Community engagement bonus (articles popular with others)
+    const communityInteractions = communityInteractionCounts.get(article.id) || 0;
+    if (communityInteractions > 5) {
+      score += Math.min(5, communityInteractions / 5); // Up to +5 for community popularity
     }
     
     return { ...article, score };

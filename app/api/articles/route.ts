@@ -4,9 +4,20 @@ export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma';
 import { getRecommendedArticles } from '@/lib/recommendations';
 import { getAuthFromRequest } from '@/lib/auth';
+import { allowRequest } from '@/lib/rate-limiter';
+import { validateAndSanitizeArticleData } from '@/lib/sanitization';
+import { handleApiError } from '@/lib/error-handling';
 
 // GET /api/articles - Get articles (with optional pagination and filtering)
 export async function GET(request: NextRequest) {
+  // Rate limit article requests
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown'
+  const key = `rl:articles:${ip}`
+  const allowed = await allowRequest(key, 60, 60) // 60 article requests per minute
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many requests, try again later' }, { status: 429 })
+  }
+
   try {
     const url = new URL(request.url);
     const searchParams = url.searchParams;
@@ -36,7 +47,9 @@ export async function GET(request: NextRequest) {
     }
     
     // Build where clause for filtering
-    const where: any = {};
+    const where: any = {
+      archived: false
+    };
     
     if (sourceId) {
       where.sourceId = sourceId;
@@ -75,11 +88,7 @@ export async function GET(request: NextRequest) {
       }
     });
   } catch (error) {
-    console.error('Error fetching articles:', error);
-    return NextResponse.json(
-      { error: 'Failed to fetch articles' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'getArticles')
   }
 }
 
@@ -87,7 +96,10 @@ export async function GET(request: NextRequest) {
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { title, summary, url, content, publishDate, categories, celebrities } = body;
+
+    // Sanitize and validate input data
+    const sanitizedData = validateAndSanitizeArticleData(body);
+    const { title, summary, url, content, publishDate, categories, celebrities } = sanitizedData;
 
     if (!title || !url) {
       return NextResponse.json(
@@ -143,10 +155,6 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(article);
   } catch (error) {
-    console.error('Error saving web result:', error);
-    return NextResponse.json(
-      { error: 'Failed to save article' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'saveArticle')
   }
 }

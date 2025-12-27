@@ -28,12 +28,23 @@ interface Settings {
   enableRecommendations: string
 }
 
+interface UserSettings {
+  retentionDays: number
+  preferredCelebrities: string[]
+  preferredCategories: string[]
+}
+
 export default function SettingsPage() {
   const [sources, setSources] = useState<Source[]>([])
   const [settings, setSettings] = useState<Settings>({
     refreshInterval: '6',
     emailTime: '08:00',
     enableRecommendations: 'true'
+  })
+  const [userSettings, setUserSettings] = useState<UserSettings>({
+    retentionDays: 30,
+    preferredCelebrities: [],
+    preferredCategories: []
   })
   const [emailRecipients, setEmailRecipients] = useState<EmailRecipient[]>([])
   const [newEmail, setNewEmail] = useState('')
@@ -60,15 +71,22 @@ export default function SettingsPage() {
 
   const fetchData = async () => {
     try {
-      const [sourcesRes, settingsRes, emailsRes] = await Promise.all([
+      const [sourcesRes, settingsRes, emailsRes, userSettingsRes] = await Promise.all([
         fetch('/api/sources'),
         fetch('/api/settings'),
-        fetch('/api/settings/emails')
+        fetch('/api/settings/emails'),
+        fetch('/api/settings') // This will get user settings if authenticated
       ])
 
       if (sourcesRes.ok) setSources(await sourcesRes.json())
       if (settingsRes.ok) setSettings(await settingsRes.json())
       if (emailsRes.ok) setEmailRecipients(await emailsRes.json())
+      if (userSettingsRes.ok) {
+        const userData = await userSettingsRes.json()
+        if (userData.retentionDays !== undefined) {
+          setUserSettings(userData)
+        }
+      }
     } catch (error) {
       console.error('Error fetching data:', error)
       showMessage('error', 'Failed to load settings')
@@ -98,6 +116,27 @@ export default function SettingsPage() {
       }
     } catch (error) {
       showMessage('error', 'Failed to save settings')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleSaveUserSettings = async () => {
+    setSaving(true)
+    try {
+      const response = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(userSettings)
+      })
+
+      if (response.ok) {
+        showMessage('success', 'User settings saved successfully!')
+      } else {
+        showMessage('error', 'Failed to save user settings')
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to save user settings')
     } finally {
       setSaving(false)
     }
@@ -358,6 +397,44 @@ export default function SettingsPage() {
             className="px-6 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50"
           >
             {saving ? 'Saving...' : 'Save Settings'}
+          </button>
+        </div>
+      </section>
+
+      {/* User Settings */}
+      <section className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
+        <h2 className="text-xl font-semibold mb-4">Article Management</h2>
+        
+        <div className="space-y-4">
+          <div>
+            <label className="block text-sm font-medium mb-2">
+              Article Retention Period
+            </label>
+            <select
+              value={userSettings.retentionDays}
+              onChange={(e) => setUserSettings({ ...userSettings, retentionDays: parseInt(e.target.value) })}
+              className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+            >
+              <option value="7">1 week</option>
+              <option value="14">2 weeks</option>
+              <option value="30">1 month (recommended)</option>
+              <option value="60">2 months</option>
+              <option value="90">3 months</option>
+              <option value="180">6 months</option>
+              <option value="365">1 year</option>
+              <option value="0">Never delete</option>
+            </select>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+              Articles older than this will be archived (not deleted) to save space while preserving your ratings.
+            </p>
+          </div>
+
+          <button
+            onClick={handleSaveUserSettings}
+            disabled={saving}
+            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+          >
+            {saving ? 'Saving...' : 'Save User Settings'}
           </button>
         </div>
       </section>

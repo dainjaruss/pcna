@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { allowRequest } from '@/lib/rate-limiter';
+import { handleApiError } from '@/lib/error-handling';
 
 export const dynamic = 'force-dynamic'
 
@@ -15,6 +17,14 @@ interface SearchFilters {
 
 // GET /api/search - Search articles with filters
 export async function GET(request: NextRequest) {
+  // Rate limit search requests
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown'
+  const key = `rl:search:${ip}`
+  const allowed = await allowRequest(key, 30, 60) // 30 searches per minute
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many search requests, try again later' }, { status: 429 })
+  }
+
   try {
     const url = new URL(request.url);
     const searchParams = url.searchParams;
@@ -32,7 +42,9 @@ export async function GET(request: NextRequest) {
     const offset = (filters.page! - 1) * filters.limit!;
 
     // Build where clause
-    const where: any = {};
+    const where: any = {
+      archived: false
+    };
 
     // Text search in title, summary, and content
     if (filters.query) {
@@ -120,10 +132,6 @@ export async function GET(request: NextRequest) {
       showWebSearch: total === 0 && filters.query && filters.query.trim().length > 0
     });
   } catch (error) {
-    console.error('Error searching articles:', error);
-    return NextResponse.json(
-      { error: 'Failed to search articles' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'searchArticles')
   }
 }

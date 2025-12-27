@@ -78,6 +78,18 @@ async function scheduleDailyEmail() {
   });
 }
 
+// Article cleanup job - runs daily at 2 AM
+async function scheduleArticleCleanup() {
+  const cronExpression = '0 2 * * *'; // Daily at 2 AM
+  
+  console.log(`[${new Date().toISOString()}] Scheduling article cleanup with cron: ${cronExpression}`);
+  
+  cron.schedule(cronExpression, async () => {
+    console.log(`[${new Date().toISOString()}] Running scheduled article cleanup...`);
+    await callInternalAPI('cleanup-articles');
+  });
+}
+
 // Initialize and start cron jobs
 async function startCronJobs() {
   console.log(`[${new Date().toISOString()}] Cron jobs script started...`);
@@ -97,6 +109,7 @@ async function startCronJobs() {
   try {
     await scheduleFetchNews();
     await scheduleDailyEmail();
+    await scheduleArticleCleanup();
     
     console.log(`[${new Date().toISOString()}] Cron jobs started successfully!`);
     console.log('Press Ctrl+C to stop.');

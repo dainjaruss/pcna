@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { allowRequest } from '@/lib/rate-limiter';
+import { handleApiError } from '@/lib/error-handling';
 
 export const dynamic = 'force-dynamic'
 
@@ -11,6 +13,14 @@ interface WebSearchResult {
 
 // GET /api/web-search - Search the web using DuckDuckGo
 export async function GET(request: NextRequest) {
+  // Rate limit web search requests
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown'
+  const key = `rl:web-search:${ip}`
+  const allowed = await allowRequest(key, 10, 60) // 10 web searches per minute
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many web search requests, try again later' }, { status: 429 })
+  }
+
   try {
     const url = new URL(request.url);
     const query = url.searchParams.get('q');
@@ -103,10 +113,6 @@ export async function GET(request: NextRequest) {
       source: 'DuckDuckGo'
     });
   } catch (error) {
-    console.error('Error in web search:', error);
-    return NextResponse.json(
-      { error: 'Failed to search the web' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'webSearch')
   }
 }

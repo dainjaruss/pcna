@@ -1,9 +1,19 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { getUserStats } from '@/lib/recommendations';
+import { allowRequest } from '@/lib/rate-limiter';
+import { handleApiError } from '@/lib/error-handling';
 
 // POST /api/ratings - Create a rating
 export async function POST(request: NextRequest) {
+  // Rate limit rating submissions
+  const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown'
+  const key = `rl:ratings:${ip}`
+  const allowed = await allowRequest(key, 20, 60) // 20 ratings per minute
+  if (!allowed) {
+    return NextResponse.json({ error: 'Too many rating submissions, try again later' }, { status: 429 })
+  }
+
   try {
     const body = await request.json();
     const { articleId, rating, feedback } = body;
@@ -32,11 +42,7 @@ export async function POST(request: NextRequest) {
     
     return NextResponse.json(newRating, { status: 201 });
   } catch (error) {
-    console.error('Error creating rating:', error);
-    return NextResponse.json(
-      { error: 'Failed to create rating' },
-      { status: 500 }
-    );
+    return handleApiError(error, 'createRating')
   }
 }
 

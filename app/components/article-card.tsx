@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import Image from 'next/image'
+import { useInteractionTracking } from './use-interaction-tracking'
 
 interface Article {
   id: string
@@ -32,6 +33,8 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
   const [aiSummary, setAiSummary] = useState<string | null>(null)
   const [isSummarizing, setIsSummarizing] = useState(false)
 
+  const { trackInteraction } = useInteractionTracking(article.id)
+
   const userRating = article.userRatings.length > 0
     ? article.userRatings[article.userRatings.length - 1].rating
     : null
@@ -53,6 +56,8 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
       if (response.ok) {
         setRating(newRating)
         onRatingUpdate?.()
+        // Track rating interaction
+        trackInteraction(article.id, 'rate', undefined, { rating: newRating })
       }
     } catch (error) {
       console.error('Error rating article:', error)
@@ -126,7 +131,12 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
         </div>
 
         <h3 className="text-lg font-bold mb-2 line-clamp-2 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
-          <a href={article.url} target="_blank" rel="noopener noreferrer">
+          <a
+            href={article.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => trackInteraction(article.id, 'click', undefined, { element: 'title' })}
+          >
             {article.highlightedTitle ? (
               <span dangerouslySetInnerHTML={{ __html: displayTitle }} />
             ) : (
@@ -212,6 +222,7 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
           href={article.url}
           target="_blank"
           rel="noopener noreferrer"
+          onClick={() => trackInteraction(article.id, 'click', undefined, { element: 'read_button' })}
           className="mt-3 block w-full text-center py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm font-medium"
         >
           Read Full Article →
