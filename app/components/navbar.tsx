@@ -28,15 +28,26 @@ export function Navbar() {
             </Link>
           </div>
           
-          {mounted && (
-            <button
-              onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
-              className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
-              aria-label="Toggle theme"
-            >
-              {theme === 'dark' ? '🌞' : '🌙'}
-            </button>
-          )}
+          <div className="flex items-center gap-4">
+            <Link href="/login" className="text-sm font-medium hover:text-purple-600 transition-colors">
+              Login
+            </Link>
+            <Link href="/register" className="text-sm font-medium hover:text-purple-600 transition-colors">
+              Register
+            </Link>
+            <Link href="/profile" className="text-sm font-medium hover:text-purple-600 transition-colors">
+              Profile
+            </Link>
+            {mounted && (
+              <button
+                onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}
+                className="p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+                aria-label="Toggle theme"
+              >
+                {theme === 'dark' ? '🌞' : '🌙'}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </nav>
