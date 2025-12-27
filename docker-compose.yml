@@ -33,7 +33,7 @@ services:
     environment:
       DATABASE_URL: postgresql://popculture:${POSTGRES_PASSWORD:-popculture_password}@postgres:5432/popculture_db?schema=public
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
-      NODE_ENV: development
+      NODE_ENV: production
       # Email settings
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
