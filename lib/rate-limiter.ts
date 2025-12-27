@@ -1,7 +1,4 @@
-import Redis from 'ioredis'
-
-const redisUrl = process.env.REDIS_URL || (process.env.REDIS_HOST ? `redis://${process.env.REDIS_HOST}:${process.env.REDIS_PORT || 6379}` : undefined)
-const redis = redisUrl ? new Redis(redisUrl) : new Redis()
+import { redis } from './redis';
 
 // Simple fixed-window rate limiter using Redis INCR/EXPIRE.
 // key: unique key per client (e.g., ip:login)

@@ -24,11 +24,12 @@ RUN npx prisma generate
 # Build Next.js application
 ENV NEXT_TELEMETRY_DISABLED 1
 ENV NODE_OPTIONS=--max-old-space-size=2048
+ENV REDIS_URL=redis://redis:6379
 RUN npm run build
 
 # Production image, copy all the files and run next
 FROM base AS runner
-# Ensure runtime has OpenSSL/libssl for Prisma query engine
+# Ensure runGlobaltime has OpenSSL/libssl for Prisma query engine
 RUN apt-get update \
 	&& apt-get install -y --no-install-recommends openssl ca-certificates libssl-dev \
 	|| true \

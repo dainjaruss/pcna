@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { ArticleCard } from './article-card'
+import { useArticles } from '../../lib/hooks/use-articles'
 
 interface Article {
   id: string
@@ -33,6 +34,7 @@ interface SearchFilters {
 interface ArticleGridProps {
   searchFilters?: SearchFilters | null
   isSearchMode?: boolean
+  onSearchLoadingChange?: (loading: boolean) => void
 }
 
 interface WebSearchResult {
@@ -42,60 +44,63 @@ interface WebSearchResult {
   displayUrl: string
 }
 
-export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGridProps) {
-  const [articles, setArticles] = useState<Article[]>([])
-  const [loading, setLoading] = useState(true)
+export function ArticleGrid({ searchFilters, isSearchMode = false, onSearchLoadingChange }: ArticleGridProps) {
   const [page, setPage] = useState(1)
-  const [hasMore, setHasMore] = useState(true)
   const [useRecommendations, setUseRecommendations] = useState(!isSearchMode)
   const [searchQuery, setSearchQuery] = useState<string | null>(null)
   const [showWebSearch, setShowWebSearch] = useState(false)
   const [webResults, setWebResults] = useState<WebSearchResult[]>([])
   const [webSearchLoading, setWebSearchLoading] = useState(false)
   const [webSearchSource, setWebSearchSource] = useState<string>('')
+  const [webSearchError, setWebSearchError] = useState<string | null>(null)
+  const [searchArticles, setSearchArticles] = useState<Article[]>([])
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchHasMore, setSearchHasMore] = useState(true)
 
+  const loadMoreRef = useRef<HTMLDivElement>(null)
+  const observerRef = useRef<IntersectionObserver | null>(null)
+
+  // Use SWR for data fetching with caching (only for non-search mode)
+  const { articles, pagination, isLoading, error, mutate } = useArticles(
+    page,
+    20,
+    useRecommendations,
+    searchFilters?.source,
+    searchFilters?.category
+  )
+
+  const hasMore = pagination ? pagination.page < pagination.totalPages : false
+
+  // Set up intersection observer for infinite scroll
   useEffect(() => {
-    if (searchFilters) {
-      // Search mode - reset and fetch with filters
-      setPage(1)
-      setArticles([])
-      fetchSearchResults(1)
-    } else {
-      // Normal mode
-      fetchArticles()
-    }
-  }, [page, useRecommendations, searchFilters])
+    if (observerRef.current) observerRef.current.disconnect()
 
-  const fetchArticles = useCallback(async () => {
-    if (isSearchMode && searchFilters) return; // Don't fetch normal articles in search mode
-
-    try {
-      setLoading(true)
-      const response = await fetch(
-        `/api/articles?page=${page}&limit=20&recommended=${useRecommendations}`
-      )
-      
-      if (response.ok) {
-        const data = await response.json()
-        if (page === 1) {
-          setArticles(data.articles)
-        } else {
-          setArticles(prev => [...prev, ...data.articles])
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        if (entries[0].isIntersecting && hasMore && !isLoading && !isSearchMode) {
+          setPage(prev => prev + 1)
         }
-        setHasMore(data.pagination.page < data.pagination.totalPages)
-      }
-    } catch (error) {
-      console.error('Error fetching articles:', error)
-    } finally {
-      setLoading(false)
+      },
+      { threshold: 0.1 }
+    )
+
+    if (loadMoreRef.current) {
+      observerRef.current.observe(loadMoreRef.current)
     }
-  }, [isSearchMode, searchFilters, page, useRecommendations])
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect()
+      }
+    }
+  }, [hasMore, isLoading, isSearchMode])
 
   const fetchSearchResults = useCallback(async (searchPage: number = 1) => {
     if (!searchFilters) return;
 
     try {
-      setLoading(true)
+      setSearchLoading(true)
+      onSearchLoadingChange?.(true)
       
       const params = new URLSearchParams({
         page: searchPage.toString(),
@@ -113,39 +118,86 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
       if (response.ok) {
         const data = await response.json()
         if (searchPage === 1) {
-          setArticles(data.articles)
+          setSearchArticles(data.articles)
           setSearchQuery(data.query)
           setShowWebSearch(data.showWebSearch || false)
         } else {
-          setArticles(prev => [...prev, ...data.articles])
+          setSearchArticles(prev => [...prev, ...data.articles])
         }
-        setHasMore(data.pagination.page < data.pagination.totalPages)
+        setSearchHasMore(data.pagination.page < data.pagination.totalPages)
       }
     } catch (error) {
       console.error('Error searching articles:', error)
     } finally {
-      setLoading(false)
+      setSearchLoading(false)
+      onSearchLoadingChange?.(false)
     }
-  }, [searchFilters])
+  }, [searchFilters, onSearchLoadingChange])
+
+  useEffect(() => {
+    if (!searchFilters) {
+      setSearchArticles([])
+      setSearchQuery(null)
+      setShowWebSearch(false)
+      setWebResults([])
+      setWebSearchSource('')
+      setWebSearchError(null)
+      setSearchHasMore(true)
+      setSearchLoading(false)
+      onSearchLoadingChange?.(false)
+      setPage(1)
+      return
+    }
+
+    setPage(1)
+    setSearchArticles([])
+    setSearchQuery(null)
+    setShowWebSearch(false)
+    setWebResults([])
+    setWebSearchSource('')
+    setWebSearchError(null)
+    setSearchHasMore(true)
+    fetchSearchResults(1)
+  }, [searchFilters, fetchSearchResults])
 
   const performWebSearch = async () => {
-    if (!searchQuery) return;
+    const queryToSearch = (searchQuery || searchFilters?.query || '').trim()
+    if (!queryToSearch) {
+      setWebSearchError('Add search keywords to try the web fallback.')
+      return
+    }
 
-    setWebSearchLoading(true);
+    setWebSearchLoading(true)
+    setWebResults([])
+    setWebSearchError(null)
+
     try {
-      const response = await fetch(`/api/web-search?q=${encodeURIComponent(searchQuery)}`);
-      if (response.ok) {
-        const data = await response.json();
-        setWebResults(data.results || []);
-        setWebSearchSource(data.source || 'Web');
-      } else {
-        setWebResults([]);
+      const response = await fetch(`/api/web-search?q=${encodeURIComponent(queryToSearch)}`)
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null)
+        const message = payload?.error?.message || 'Web search temporarily unavailable.'
+        throw new Error(message)
       }
+
+      const data = await response.json()
+      setWebSearchSource(data.source || 'DuckDuckGo')
+
+      if (!Array.isArray(data.results) || data.results.length === 0) {
+        setWebSearchError('No web search results were returned for that query.')
+        setWebResults([])
+        return
+      }
+
+      setWebResults(data.results)
+      setWebSearchError(null)
     } catch (error) {
-      console.error('Error performing web search:', error);
-      setWebResults([]);
+      console.error('Error performing web search:', error)
+      const message = error instanceof Error ? error.message : 'Unable to perform the web search right now.'
+      setWebSearchError(message)
+      setWebResults([])
     } finally {
-      setWebSearchLoading(false);
+      setWebSearchLoading(false)
     }
   }
 
@@ -182,13 +234,12 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
   }
 
   const handleRatingUpdate = () => {
-    // Refresh articles after rating
-    setPage(1)
-    fetchArticles()
+    // Refresh articles after rating using SWR mutate
+    mutate()
   }
 
   const loadMore = () => {
-    if (!loading && hasMore) {
+    if (!isLoading && hasMore) {
       setPage(prev => prev + 1)
     }
   }
@@ -196,9 +247,10 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
   const toggleRecommendations = () => {
     setUseRecommendations(prev => !prev)
     setPage(1)
+    mutate() // Clear cache when switching modes
   }
 
-  if (loading && page === 1) {
+  if (isLoading && page === 1) {
     return (
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {[...Array(6)].map((_, i) => (
@@ -242,13 +294,13 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
         </div>
         
         <div className="text-sm text-gray-600 dark:text-gray-400">
-          {articles.length} articles
+          {isSearchMode ? searchArticles.length : articles.length} articles
         </div>
       </div>
 
-      {articles.length === 0 && !loading ? (
+      {(isSearchMode ? searchArticles.length === 0 : articles.length === 0) && !(isSearchMode ? searchLoading : isLoading) ? (
         <div className="text-center py-12">
-          {isSearchMode && showWebSearch ? (
+          {isSearchMode && showWebSearch && webResults.length === 0 ? (
             <>
               <p className="text-gray-600 dark:text-gray-400 text-lg mb-4">
                 No articles found in our database for &quot;{searchQuery}&quot;.
@@ -269,6 +321,11 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
               >
                 Add Custom Sources
               </a>
+              {webSearchError && (
+                <p className="text-sm text-red-500 mt-4">
+                  {webSearchError}
+                </p>
+              )}
             </>
           ) : (
             <>
@@ -290,7 +347,7 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
       ) : (
         <>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {articles.map(article => (
+            {(isSearchMode ? searchArticles : articles).map(article => (
               <ArticleCard
                 key={article.id}
                 article={article}
@@ -358,15 +415,16 @@ export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGrid
             </div>
           )}
 
-          {hasMore && (
-            <div className="mt-8 text-center">
-              <button
-                onClick={loadMore}
-                disabled={loading}
-                className="px-8 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Loading...' : 'Load More'}
-              </button>
+          {(isSearchMode ? searchHasMore : hasMore) && !isSearchMode && (
+            <div 
+              ref={loadMoreRef} 
+              className="mt-8 text-center py-4"
+            >
+              {isLoading && page > 1 && (
+                <div className="inline-block px-8 py-3 bg-gray-200 dark:bg-gray-700 text-gray-600 dark:text-gray-400 rounded-lg">
+                  Loading more articles...
+                </div>
+              )}
             </div>
           )}
         </>

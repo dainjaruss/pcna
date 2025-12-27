@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
-import { rotateRefreshToken, signAccessToken, setAuthCookies } from '@/lib/auth'
+import { rotateRefreshToken, signAccessToken, setAuthCookies, inferSecureCookieFlag } from '@/lib/auth'
 
 export async function POST(req: Request) {
   try {
@@ -18,7 +18,8 @@ export async function POST(req: Request) {
     const { token: newRefresh, expiresAt } = await rotateRefreshToken(tokenHash, dbToken.userId)
     const access = signAccessToken({ sub: dbToken.userId })
     const res = NextResponse.json({ ok: true })
-    setAuthCookies(res, access, newRefresh, expiresAt)
+    const secureFlag = inferSecureCookieFlag(req)
+    setAuthCookies(res, access, newRefresh, expiresAt, { secure: secureFlag })
     return res
   } catch (e: any) {
     return NextResponse.json({ error: e.message || 'Invalid request' }, { status: 400 })

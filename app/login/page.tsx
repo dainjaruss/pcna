@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/useAuth'
 
 export default function LoginPage() {
   const router = useRouter()
+  const { refreshUser } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [remember, setRemember] = useState(true)
@@ -27,10 +29,15 @@ export default function LoginPage() {
         setLoading(false)
         return
       }
-      // Server sets httpOnly cookies; frontend should not store tokens.
-      router.push('/profile')
+      
+      // Refresh auth state
+      await refreshUser()
+      
+      const redirectPath = data?.needsOnboarding ? '/onboarding/sources' : '/profile'
+      router.push(redirectPath)
     } catch (err: any) {
       setError(err.message || 'Login error')
+    } finally {
       setLoading(false)
     }
   }

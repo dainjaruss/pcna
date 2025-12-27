@@ -14,6 +14,8 @@ interface Article {
   publishDate: string
   source: {
     name: string
+    credibilityRating: number
+    credibilityReason?: string
   }
   userRatings: Array<{ rating: number }>
   celebrities: string[]
@@ -112,7 +114,10 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
             alt={article.title}
             fill
             className="object-cover"
-            unoptimized
+            loading="lazy"
+            placeholder="blur"
+            blurDataURL="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAYEBQYFBAYGBQYHBwYIChAKCgkJChQODwwQFxQYGBcUFhYaHSUfGhsjHBYWICwgIyYnKSopGR8tMC0oMCUoKSj/2wBDAQcHBwoIChMKChMoGhYaKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCgoKCj/wAARCAAIAAoDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAv/xAAhEAACAQMDBQAAAAAAAAAAAAABAgMABAUGIWGRkqGx0f/EABUBAQEAAAAAAAAAAAAAAAAAAAMF/8QAGhEAAgIDAAAAAAAAAAAAAAAAAAECEgMRkf/aAAwDAQACEQMRAD8AltJagyeH0AthI5xdrLcNM91BF5pX2HaH9bcfaSXWGaRmknyJckliyjqTzSlT54b6bk+h0R+IRjWjBqO6O2mhP//Z"
+            sizes="(max-width: 768px) 100vw, (max-width: 1200px) 50vw, 33vw"
           />
         </div>
       )}
@@ -122,10 +127,16 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
           <span className="text-xs font-semibold px-2 py-1 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-200">
             {article.source.name}
           </span>
-          <div className="flex items-center gap-1">
-            <span className="text-xs text-gray-600 dark:text-gray-400">Credibility:</span>
-            <span className="text-xs font-bold text-green-600 dark:text-green-400">
-              {article.credibilityRating}/10
+          <div 
+            className="flex items-center gap-1 cursor-help"
+            title={`Source credibility: ${article.source.credibilityRating}/10${article.source.credibilityReason ? ` - ${article.source.credibilityReason}` : ''}`}
+          >
+            <span className="text-xs text-gray-600 dark:text-gray-400">Source:</span>
+            <span className={`text-xs font-bold px-2 py-1 rounded text-white ${
+              article.source.credibilityRating >= 8 ? 'bg-green-600' :
+              article.source.credibilityRating >= 6 ? 'bg-yellow-600' : 'bg-red-600'
+            }`}>
+              {article.source.credibilityRating}/10
             </span>
           </div>
         </div>

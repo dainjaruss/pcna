@@ -7,14 +7,19 @@ import { getAuthFromRequest } from '@/lib/auth';
 import { allowRequest } from '@/lib/rate-limiter';
 import { validateAndSanitizeArticleData } from '@/lib/sanitization';
 import { handleApiError } from '@/lib/error-handling';
+import { Cache } from '@/lib/cache';
+import { logger, logPerformance } from '@/lib/logger';
 
 // GET /api/articles - Get articles (with optional pagination and filtering)
 export async function GET(request: NextRequest) {
-  // Rate limit article requests
+  const startTime = Date.now();
   const ip = request.headers.get('x-forwarded-for') || request.headers.get('x-real-ip') || request.headers.get('cf-connecting-ip') || 'unknown'
+  
+  // Rate limit article requests
   const key = `rl:articles:${ip}`
   const allowed = await allowRequest(key, 60, 60) // 60 article requests per minute
   if (!allowed) {
+    logger.warn('Rate limit exceeded for articles', { ip });
     return NextResponse.json({ error: 'Too many requests, try again later' }, { status: 429 })
   }
 
@@ -23,11 +28,15 @@ export async function GET(request: NextRequest) {
     const searchParams = url.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
+    const cursor = searchParams.get('cursor');
     const useRecommendations = searchParams.get('recommended') === 'true';
     const sourceId = searchParams.get('source');
     const celebrity = searchParams.get('celebrity');
     
-    const offset = (page - 1) * limit;
+    const auth = getAuthFromRequest(request as any);
+    const userId = auth?.sub;
+    
+    const offset = cursor ? 0 : (page - 1) * limit;
     
     // If recommendations are enabled, use recommendation algorithm
     if (useRecommendations) {
@@ -62,32 +71,77 @@ export async function GET(request: NextRequest) {
     }
     
     // Standard query without recommendations
-    const [articles, total] = await Promise.all([
-      prisma.article.findMany({
-        where,
-        include: {
-          source: true,
-          userRatings: true
-        },
-        orderBy: {
-          publishDate: 'desc'
-        },
-        skip: offset,
-        take: limit
-      }),
-      prisma.article.count({ where })
-    ]);
+    const cacheKey = `articles:list:${sourceId || 'all'}:${celebrity || 'all'}:${cursor || page}:${limit}:${userId || 'anon'}`;
+    
+    const result = await Cache.getOrSet(cacheKey, async () => {
+      const [articles, total] = await Promise.all([
+        prisma.article.findMany({
+          where,
+          include: {
+            source: {
+              select: {
+                name: true,
+                credibilityRating: true,
+                credibilityReason: true
+              }
+            },
+            userRatings: {
+              where: userId ? { userId } : undefined,
+              select: { rating: true, createdAt: true }
+            }
+          },
+          orderBy: {
+            publishDate: 'desc'
+          },
+          ...(cursor 
+            ? { 
+                take: limit,
+                skip: 1, // Skip the cursor item
+                cursor: { id: cursor }
+              }
+            : {
+                skip: offset,
+                take: limit
+              }
+          )
+        }),
+        prisma.article.count({ where })
+      ]);
+      
+      return { articles, total };
+    }, { ttl: 300 }); // Cache for 5 minutes
+    
+    const { articles, total } = result;
+    
+    const nextCursor = articles.length === limit ? articles[articles.length - 1].id : null;
+    
+    // Log performance metrics
+    const duration = Date.now() - startTime;
+    logPerformance({
+      route: '/api/articles',
+      method: 'GET',
+      statusCode: 200,
+      responseTime: duration,
+      cacheHit: false,
+      ip,
+    });
     
     return NextResponse.json({
       articles,
       pagination: {
-        page,
+        ...(cursor ? {} : { page, totalPages: Math.ceil(total / limit) }),
         limit,
         total,
-        totalPages: Math.ceil(total / limit)
+        ...(nextCursor && { nextCursor })
       }
     });
   } catch (error) {
+    const duration = Date.now() - startTime;
+    logger.error('Error fetching articles', { 
+      error: error instanceof Error ? error.message : String(error),
+      duration,
+      ip 
+    });
     return handleApiError(error, 'getArticles')
   }
 }
@@ -153,8 +207,16 @@ export async function POST(request: NextRequest) {
       }
     });
 
+    // Invalidate article caches since we added a new article
+    await Cache.invalidate('articles:list:all:all:*');
+    
+    logger.info('Article saved from web search', { articleId: article.id, title: article.title });
+
     return NextResponse.json(article);
   } catch (error) {
+    logger.error('Error saving article from web search', { 
+      error: error instanceof Error ? error.message : String(error) 
+    });
     return handleApiError(error, 'saveArticle')
   }
 }

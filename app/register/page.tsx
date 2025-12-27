@@ -2,9 +2,11 @@
 
 import React, { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAuth } from '@/lib/useAuth'
 
 export default function RegisterPage() {
   const router = useRouter()
+  const { refreshUser } = useAuth()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -34,13 +36,17 @@ export default function RegisterPage() {
       const data = await res.json()
       if (!res.ok) {
         setError(data.error || 'Registration failed')
-        setLoading(false)
         return
       }
-      // Server now sets httpOnly cookies; do not persist tokens client-side.
-      router.push('/profile')
+      
+      // Refresh auth state
+      await refreshUser()
+      
+      const redirectPath = data?.needsOnboarding ? '/onboarding/sources' : '/profile'
+      router.push(redirectPath)
     } catch (err: any) {
       setError(err.message || 'Registration error')
+    } finally {
       setLoading(false)
     }
   }

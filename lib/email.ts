@@ -1,7 +1,9 @@
 import nodemailer from 'nodemailer';
 import { prisma } from './prisma';
+import { generateEmailTemplate, generateEmailPlainText } from './email-templates';
+import { logger, logPerformance } from './logger';
 
-interface EmailArticle {
+export interface EmailArticle {
   title: string;
   summary: string;
   url: string;
@@ -36,59 +38,6 @@ export function createEmailTransporter() {
       pass: process.env.SMTP_PASSWORD,
     },
   });
-}
-
-// Generate HTML email template
-function generateEmailHTML(articles: EmailArticle[], appUrl: string): string {
-  const articlesHTML = articles.map(article => `
-    <div style="margin-bottom: 30px; padding: 20px; background: #f9f9f9; border-radius: 8px;">
-      ${article.imageUrl ? `
-        <img src="${article.imageUrl}" alt="${article.title}" style="max-width: 100%; height: auto; border-radius: 8px; margin-bottom: 15px;" />
-      ` : ''}
-      <h2 style="margin: 0 0 10px 0; font-size: 20px; color: #333;">
-        <a href="${article.url}" style="color: #0066cc; text-decoration: none;">${article.title}</a>
-      </h2>
-      <div style="margin-bottom: 10px; font-size: 14px; color: #666;">
-        <strong>Source:</strong> ${article.source.name} | 
-        <strong>Credibility:</strong> ${article.credibilityRating}/10
-      </div>
-      <p style="margin: 0; color: #555; line-height: 1.6;">${article.summary}</p>
-      <a href="${article.url}" style="display: inline-block; margin-top: 10px; padding: 8px 16px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px;">Read More</a>
-    </div>
-  `).join('');
-  
-  return `
-    <!DOCTYPE html>
-    <html>
-    <head>
-      <meta charset="utf-8">
-      <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>Your Daily Pop Culture News</title>
-    </head>
-    <body style="margin: 0; padding: 0; font-family: Arial, sans-serif; background-color: #f4f4f4;">
-      <div style="max-width: 600px; margin: 0 auto; background: white; padding: 20px;">
-        <div style="text-align: center; padding: 20px 0; border-bottom: 2px solid #0066cc;">
-          <h1 style="margin: 0; color: #0066cc;">📰 Your Daily Pop Culture News</h1>
-          <p style="margin: 10px 0 0 0; color: #666;">The latest celebrity news and gossip</p>
-        </div>
-        
-        <div style="padding: 20px 0;">
-          ${articlesHTML}
-        </div>
-        
-        <div style="text-align: center; padding: 20px; border-top: 2px solid #eee; margin-top: 20px;">
-          <p style="margin: 0 0 10px 0; color: #666;">Want to see more?</p>
-          <a href="${appUrl}" style="display: inline-block; padding: 12px 24px; background: #0066cc; color: white; text-decoration: none; border-radius: 4px; font-weight: bold;">Visit News App</a>
-        </div>
-        
-        <div style="text-align: center; padding: 20px 0; color: #999; font-size: 12px;">
-          <p style="margin: 0;">You're receiving this because you're subscribed to daily pop culture news updates.</p>
-          <p style="margin: 5px 0 0 0;">Manage your preferences in the app settings.</p>
-        </div>
-      </div>
-    </body>
-    </html>
-  `;
 }
 
 // Get top articles for email (personalized based on ratings)
@@ -128,7 +77,13 @@ export async function getTopArticlesForEmail(limit: number = 10): Promise<EmailA
       }
     },
     include: {
-      source: true,
+      source: {
+        select: {
+          name: true,
+          credibilityRating: true,
+          credibilityReason: true
+        }
+      },
       userRatings: true
     },
     orderBy: {
@@ -172,7 +127,8 @@ export async function getTopArticlesForEmail(limit: number = 10): Promise<EmailA
 // Send daily email summary
 export async function sendDailyEmailSummary() {
   try {
-    console.log('Starting daily email summary...');
+    logger.info('Starting daily email summary...');
+    const startTime = Date.now();
     
     // Get active email recipients
     const recipients = await prisma.emailRecipient.findMany({
@@ -180,23 +136,35 @@ export async function sendDailyEmailSummary() {
     });
     
     if (recipients.length === 0) {
-      console.log('No active email recipients found');
-      return;
+      logger.info('No active email recipients found');
+      return { sent: 0, failed: 0 };
     }
     
     // Get top articles
     const articles = await getTopArticlesForEmail(10);
     
     if (articles.length === 0) {
-      console.log('No articles found for email');
-      return;
+      logger.info('No articles found for email');
+      return { sent: 0, failed: 0 };
     }
     
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const emailHTML = generateEmailHTML(articles, appUrl);
+    const emailHTML = generateEmailTemplate({
+      articles,
+      appUrl,
+      templateType: 'daily',
+    });
+    const emailPlainText = generateEmailPlainText({
+      articles,
+      appUrl,
+      templateType: 'daily',
+    });
     const transporter = createEmailTransporter();
     
     const fromEmail = process.env.SENDGRID_FROM || process.env.SMTP_FROM || process.env.SMTP_USER;
+    
+    let sentCount = 0;
+    let failedCount = 0;
     
     // Send email to each recipient
     for (const recipient of recipients) {
@@ -206,17 +174,29 @@ export async function sendDailyEmailSummary() {
           to: recipient.email,
           subject: `📰 Your Daily Pop Culture News - ${new Date().toLocaleDateString()}`,
           html: emailHTML,
+          text: emailPlainText,
         });
         
-        console.log(`Email sent to ${recipient.email}`);
+        sentCount++;
+        logger.info(`Email sent to ${recipient.email}`);
       } catch (error) {
-        console.error(`Error sending email to ${recipient.email}:`, error);
+        failedCount++;
+        logger.error(`Error sending email to ${recipient.email}`, { error });
       }
     }
     
-    console.log('Daily email summary completed');
+    logPerformance({
+      route: '/email/daily-summary',
+      method: 'CRON',
+      statusCode: 200,
+      responseTime: Date.now() - startTime,
+      cacheHit: false,
+    });
+    
+    logger.info('Daily email summary completed', { sentCount, failedCount, recipientCount: recipients.length, articleCount: articles.length });
+    return { sent: sentCount, failed: failedCount };
   } catch (error) {
-    console.error('Error in sendDailyEmailSummary:', error);
+    logger.error('Error in sendDailyEmailSummary', { error });
     throw error;
   }
 }
@@ -226,9 +206,19 @@ export async function sendTestEmail(recipientEmail: string) {
   try {
     const articles = await getTopArticlesForEmail(3);
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const emailHTML = generateEmailHTML(articles, appUrl);
-    const transporter = createEmailTransporter();
     
+    const emailHTML = generateEmailTemplate({
+      articles,
+      appUrl,
+      templateType: 'daily',
+    });
+    const emailPlainText = generateEmailPlainText({
+      articles,
+      appUrl,
+      templateType: 'daily',
+    });
+    
+    const transporter = createEmailTransporter();
     const fromEmail = process.env.SENDGRID_FROM || process.env.SMTP_FROM || process.env.SMTP_USER;
     
     await transporter.sendMail({
@@ -236,11 +226,13 @@ export async function sendTestEmail(recipientEmail: string) {
       to: recipientEmail,
       subject: '🧪 Test Email - Pop Culture News App',
       html: emailHTML,
+      text: emailPlainText,
     });
     
+    logger.info('Test email sent successfully', { recipientEmail });
     return { success: true, message: 'Test email sent successfully' };
   } catch (error: any) {
-    console.error('Error sending test email:', error);
+    logger.error('Error sending test email', { error, recipientEmail });
     return { success: false, message: error.message };
   }
 }

@@ -88,7 +88,13 @@ export async function GET(request: NextRequest) {
       prisma.article.findMany({
         where,
         include: {
-          source: true,
+          source: {
+            select: {
+              name: true,
+              credibilityRating: true,
+              credibilityReason: true
+            }
+          },
           userRatings: true
         },
         orderBy: {

@@ -9,6 +9,9 @@ interface Source {
   rssUrl?: string
   enabled: boolean
   credibilityRating: number
+  credibilityReason?: string
+  lastCredibilityCheck?: string
+  credibilityHistory?: any[]
   isCustom: boolean
   type: string
   _count: {
@@ -60,10 +63,16 @@ export default function SettingsPage() {
     name: '',
     url: '',
     rssUrl: '',
-    credibilityRating: 5,
     type: 'rss' as 'rss' | 'scrape' | 'api'
   })
   const [addingSource, setAddingSource] = useState(false)
+  const [credibilityAnalysis, setCredibilityAnalysis] = useState<{
+    score: number;
+    reason: string;
+    strengths: string[];
+    concerns: string[];
+    confidence: string;
+  } | null>(null)
 
   useEffect(() => {
     fetchData()
@@ -280,9 +289,9 @@ export default function SettingsPage() {
           name: '',
           url: '',
           rssUrl: '',
-          credibilityRating: 5,
           type: 'rss'
         })
+        setCredibilityAnalysis(null)
         setShowAddSource(false)
         showMessage('success', 'Custom source added successfully!')
       } else {
@@ -314,6 +323,28 @@ export default function SettingsPage() {
       }
     } catch (error) {
       showMessage('error', 'Failed to delete source')
+    }
+  }
+
+  const handleRefreshCredibility = async (sourceId: string) => {
+    try {
+      // Call the update credibility endpoint for a single source
+      const response = await fetch('/api/sources/update-credibility', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sourceId }) // We'll need to modify the endpoint to accept single source
+      })
+
+      if (response.ok) {
+        const result = await response.json()
+        // Refresh the sources list
+        await fetchData()
+        showMessage('success', 'Credibility score refreshed!')
+      } else {
+        showMessage('error', 'Failed to refresh credibility score')
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to refresh credibility score')
     }
   }
 
@@ -445,6 +476,12 @@ export default function SettingsPage() {
           <h2 className="text-xl font-semibold">News Sources</h2>
           <div className="flex gap-2">
             <button
+              onClick={() => window.location.href = '/onboarding/sources'}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors text-sm"
+            >
+              🎯 Re-run Onboarding
+            </button>
+            <button
               onClick={() => setShowAddSource(!showAddSource)}
               className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
             >
@@ -507,17 +544,6 @@ export default function SettingsPage() {
                   <option value="api">API</option>
                 </select>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Credibility Rating (1-10)</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  value={newSource.credibilityRating}
-                  onChange={(e) => setNewSource({ ...newSource, credibilityRating: parseInt(e.target.value) || 5 })}
-                  className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
-                />
-              </div>
             </div>
             <div className="flex gap-2">
               <button
@@ -525,7 +551,7 @@ export default function SettingsPage() {
                 disabled={addingSource}
                 className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
               >
-                {addingSource ? 'Adding...' : 'Add Source'}
+                {addingSource ? 'Analyzing source credibility...' : 'Add Source'}
               </button>
               <button
                 onClick={() => setShowAddSource(false)}
@@ -534,6 +560,48 @@ export default function SettingsPage() {
                 Cancel
               </button>
             </div>
+            {credibilityAnalysis && (
+              <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg">
+                <h4 className="font-medium text-blue-900 dark:text-blue-100 mb-2">
+                  Credibility Analysis Complete
+                </h4>
+                <div className="space-y-2 text-sm">
+                  <div className="flex items-center gap-2">
+                    <span className="font-medium">Score:</span>
+                    <span className={`px-2 py-1 rounded text-white text-xs ${
+                      credibilityAnalysis.score >= 8 ? 'bg-green-600' :
+                      credibilityAnalysis.score >= 6 ? 'bg-yellow-600' : 'bg-red-600'
+                    }`}>
+                      {credibilityAnalysis.score}/10
+                    </span>
+                    <span className="text-xs text-gray-600 dark:text-gray-400">
+                      ({credibilityAnalysis.confidence} confidence)
+                    </span>
+                  </div>
+                  <p className="text-gray-700 dark:text-gray-300">{credibilityAnalysis.reason}</p>
+                  {credibilityAnalysis.strengths.length > 0 && (
+                    <div>
+                      <span className="font-medium text-green-700 dark:text-green-300">Strengths:</span>
+                      <ul className="list-disc list-inside ml-4 text-gray-600 dark:text-gray-400">
+                        {credibilityAnalysis.strengths.map((strength, i) => (
+                          <li key={i}>{strength}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {credibilityAnalysis.concerns.length > 0 && (
+                    <div>
+                      <span className="font-medium text-orange-700 dark:text-orange-300">Concerns:</span>
+                      <ul className="list-disc list-inside ml-4 text-gray-600 dark:text-gray-400">
+                        {credibilityAnalysis.concerns.map((concern, i) => (
+                          <li key={i}>{concern}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
         
@@ -565,24 +633,49 @@ export default function SettingsPage() {
                       )}
                     </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
-                      {source._count.articles} articles • Credibility: {source.credibilityRating}/10
+                      {source._count.articles} articles • 
+                      <span className={`font-medium ${
+                        source.credibilityRating >= 8 ? 'text-green-600' :
+                        source.credibilityRating >= 6 ? 'text-yellow-600' : 'text-red-600'
+                      }`}>
+                        Credibility: {source.credibilityRating}/10
+                      </span>
                       {source.type && ` • Type: ${source.type}`}
                     </p>
+                    {source.credibilityReason && (
+                      <p className="text-xs text-gray-500 dark:text-gray-500 mt-1 max-w-md">
+                        {source.credibilityReason}
+                      </p>
+                    )}
                     <p className="text-xs text-gray-500 dark:text-gray-500">
                       {source.url}
+                      {source.lastCredibilityCheck && (
+                        <span className="ml-2">
+                          • Last checked: {new Date(source.lastCredibilityCheck).toLocaleDateString()}
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
               </div>
-              {source.isCustom && (
+              <div className="flex gap-2">
                 <button
-                  onClick={() => handleDeleteSource(source.id)}
-                  className="text-red-600 hover:text-red-700 text-sm font-medium ml-4"
-                  title="Delete custom source"
+                  onClick={() => handleRefreshCredibility(source.id)}
+                  className="text-blue-600 hover:text-blue-700 text-sm font-medium"
+                  title="Refresh credibility score"
                 >
-                  🗑️
+                  🔄 Refresh Score
                 </button>
-              )}
+                {source.isCustom && (
+                  <button
+                    onClick={() => handleDeleteSource(source.id)}
+                    className="text-red-600 hover:text-red-700 text-sm font-medium"
+                    title="Delete custom source"
+                  >
+                    🗑️
+                  </button>
+                )}
+              </div>
             </div>
           ))}
         </div>

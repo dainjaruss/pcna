@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { prisma } from '@/lib/prisma'
-import { hashPassword, signAccessToken, createRefreshTokenForUser, setAuthCookies } from '@/lib/auth'
+import { hashPassword, signAccessToken, createRefreshTokenForUser, setAuthCookies, inferSecureCookieFlag } from '@/lib/auth'
 import { allowRequest, getRequestCount } from '@/lib/rate-limiter'
 import { sanitizeEmail, sanitizePassword, sanitizeString } from '@/lib/sanitization'
 import { handleApiError } from '@/lib/error-handling'
@@ -47,8 +47,12 @@ export async function POST(req: Request) {
 
     const access = signAccessToken({ sub: user.id, email: user.email })
     const { token: refreshToken, expiresAt } = await createRefreshTokenForUser(user.id)
-    const res = NextResponse.json({ user: { id: user.id, email: user.email, name: user.name } })
-    setAuthCookies(res, access, refreshToken, expiresAt)
+    const res = NextResponse.json({
+      user: { id: user.id, email: user.email, name: user.name },
+      needsOnboarding: true
+    })
+    const secureFlag = inferSecureCookieFlag(req)
+    setAuthCookies(res, access, refreshToken, expiresAt, { secure: secureFlag })
     return res
   } catch (error) {
     return handleApiError(error, 'register')

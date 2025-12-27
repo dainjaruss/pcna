@@ -1,12 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { fetchAllNews } from '@/lib/news-fetcher';
+import { logger, withLogging, logSecurityEvent } from '@/lib/logger';
 
 // POST /api/cron/fetch-news - Trigger news fetch (can be called by n8n, cron, or manually)
 export async function POST(request: NextRequest) {
+  const startTime = Date.now();
+  
   try {
     // API Key authentication for external calls (e.g., from n8n)
     const authHeader = request.headers.get('authorization');
     const apiKey = process.env.API_KEY;
+    const ip = request.headers.get('x-forwarded-for') || 'unknown';
     
     // If API_KEY is set, require authentication. Allow a trusted UI trigger
     // from the same origin by sending `x-ui-trigger: true` header.
@@ -25,7 +29,11 @@ export async function POST(request: NextRequest) {
       );
 
       if (!isValidBearer && !isUiAllowed) {
-        console.warn('Unauthorized fetch-news attempt', { origin, allowedOrigin, uiTrigger, authHeaderPresent: !!authHeader });
+        logSecurityEvent({
+          event: 'unauthorized_access',
+          ip,
+          details: { endpoint: '/api/cron/fetch-news', origin, uiTrigger }
+        });
         return NextResponse.json(
           { error: 'Unauthorized - Invalid or missing API key' },
           { status: 401 }
@@ -33,8 +41,14 @@ export async function POST(request: NextRequest) {
       }
     }
     
-    console.log(`[${new Date().toISOString()}] News fetch triggered via API`);
-    const result = await fetchAllNews();
+    logger.info('News fetch triggered via API', { source: uiTrigger ? 'ui' : 'external', origin });
+    
+    const result = await withLogging('fetchAllNews', () => fetchAllNews(), { 
+      source: uiTrigger ? 'ui' : 'external' 
+    });
+    
+    const duration = Date.now() - startTime;
+    logger.info('News fetch completed', { duration, ...result });
     
     return NextResponse.json({
       success: true,
@@ -42,7 +56,12 @@ export async function POST(request: NextRequest) {
       ...result
     });
   } catch (error: any) {
-    console.error('Error in fetch news API:', error);
+    const duration = Date.now() - startTime;
+    logger.error('Error in fetch news API', { 
+      error: error.message, 
+      stack: error.stack,
+      duration 
+    });
     return NextResponse.json(
       { success: false, error: error.message || 'Failed to fetch news' },
       { status: 500 }

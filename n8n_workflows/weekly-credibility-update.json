@@ -1,0 +1,152 @@
+{
+  "name": "Weekly Credibility Score Updates",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "amount": 1
+            }
+          ],
+          "weekday": "sunday",
+          "hours": 2,
+          "minutes": 0
+        }
+      },
+      "id": "weekly-trigger",
+      "name": "Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [
+        240,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "url": "https://your-domain.com/api/sources/update-credibility",
+        "method": "POST",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_CRON_API_KEY"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/json"
+            }
+          ]
+        },
+        "sendBody": true,
+        "body": "{}",
+        "options": {}
+      },
+      "id": "http-request",
+      "name": "HTTP Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 3,
+      "position": [
+        460,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.success }}",
+              "value2": true
+            }
+          ]
+        }
+      },
+      "id": "success-check",
+      "name": "Success Check",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 1,
+      "position": [
+        680,
+        300
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Weekly Credibility Update Complete",
+        "email": "admin@your-domain.com",
+        "body": "Weekly credibility score update completed successfully.\n\nSources checked: {{ $json.sourcesChecked }}\nSources updated: {{ $json.sourcesUpdated }}\n\nChanges:\n{{ $json.changes }}"
+      },
+      "id": "success-email",
+      "name": "Send Success Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        200
+      ]
+    },
+    {
+      "parameters": {
+        "subject": "Weekly Credibility Update Failed",
+        "email": "admin@your-domain.com",
+        "body": "Weekly credibility score update failed.\n\nError: {{ $json.error }}"
+      },
+      "id": "failure-email",
+      "name": "Send Failure Email",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 1,
+      "position": [
+        900,
+        400
+      ]
+    }
+  ],
+  "connections": {
+    "weekly-trigger": {
+      "main": [
+        [
+          {
+            "node": "http-request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "http-request": {
+      "main": [
+        [
+          {
+            "node": "success-check",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "success-check": {
+      "main": [
+        [
+          {
+            "node": "success-email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "failure-email",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {},
+  "staticData": null
+}

@@ -124,7 +124,8 @@
 - [x] Add collaborative filtering for multiple users ✅ COMPLETED
 - [x] Enhance recommendation scoring with ML insights ✅ COMPLETED
 
-##  Known Issues & Bugs
+## 🐛 Known Issues & Bugs
+- [x] **News Fetching Error**: "Fetch news now" functionality fails with URL validation error for federalnewsnetwork.com: `Invalid url` for rssUrl field ✅ **RESOLVED** - Fixed URL normalization in sources API to automatically add https:// protocol when missing
 - [ ] None currently identified
 
 ## 📊 Testing Status

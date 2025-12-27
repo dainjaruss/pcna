@@ -12,6 +12,12 @@ const nextConfig = {
       },
     ],
   },
+  // Allow server actions from the production domain
+  experimental: {
+    serverActions: {
+      allowedOrigins: ['popcna.duckdns.org', 'localhost:3000'],
+    },
+  },
   // Transpile modern ESM packages that use newer syntax (like `undici`/`cheerio`)
   // so Next's build (SWC/webpack) can process them.
   transpilePackages: ['cheerio', 'undici'],

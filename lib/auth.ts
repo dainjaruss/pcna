@@ -61,22 +61,34 @@ export async function findRefreshTokenByHash(tokenHash: string) {
   return prisma.refreshToken.findUnique({ where: { tokenHash } })
 }
 
-export function setAuthCookies(res: any, accessToken: string, refreshToken: string, refreshExpiresAt: Date) {
-  // res is NextResponse
-  // Hardening: use SameSite=strict for access token and secure flag in production.
+interface SetAuthCookieOptions {
+  secure?: boolean
+}
+
+export function setAuthCookies(
+  res: any,
+  accessToken: string,
+  refreshToken: string,
+  refreshExpiresAt: Date,
+  options?: SetAuthCookieOptions
+) {
+  const secure = typeof options?.secure === 'boolean'
+    ? options.secure
+    : shouldUseSecureCookiesByDefault()
+
   res.cookies.set('access_token', accessToken, {
     httpOnly: true,
     sameSite: 'strict',
     path: '/',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     maxAge: 24 * 60 * 60, // seconds
   })
-  // Refresh token may be slightly longer-lived; keep strict to prevent CSRF.
+
   res.cookies.set('refresh_token', refreshToken, {
     httpOnly: true,
     sameSite: 'strict',
     path: '/',
-    secure: process.env.NODE_ENV === 'production',
+    secure,
     expires: refreshExpiresAt,
   })
 }
@@ -104,4 +116,45 @@ export function getAuthFromRequest(req: NextRequest) {
     // ignore
   }
   return null
+}
+
+export function inferSecureCookieFlag(req?: Request) {
+  if (!req) {
+    return undefined
+  }
+
+  const headerProto = req.headers.get('x-forwarded-proto')
+    || req.headers.get('x-forwarded-protocol')
+    || req.headers.get('x-forwarded-scheme')
+
+  if (headerProto) {
+    return headerProto.split(',')[0].trim().toLowerCase() === 'https'
+  }
+
+  try {
+    const url = new URL(req.url)
+    return url.protocol === 'https:'
+  } catch (error) {
+    return undefined
+  }
+}
+
+function shouldUseSecureCookiesByDefault() {
+  if (process.env.ALLOW_INSECURE_COOKIES === 'true') {
+    return false
+  }
+
+  if (process.env.FORCE_SECURE_COOKIES === 'true') {
+    return true
+  }
+
+  const appUrl = (process.env.NEXT_PUBLIC_APP_URL || '').toLowerCase()
+  if (appUrl.startsWith('https://')) {
+    return true
+  }
+  if (appUrl.startsWith('http://')) {
+    return false
+  }
+
+  return process.env.NODE_ENV === 'production'
 }

@@ -54,3 +54,8 @@ n8n/workflows/
 # Ignore lockfiles only if you intentionally don't want to track them (usually you do track them)
 # pnpm-lock.yaml
 # package-lock.json
+
+# Local test files
+cookies.txt
+smoke_cookies.txt
+*.backup

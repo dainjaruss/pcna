@@ -1,4 +1,5 @@
 import { prisma } from './prisma';
+import { Cache } from './cache';
 
 interface ArticleWithScore {
   id: string;
@@ -113,41 +114,44 @@ export async function getRecommendedArticles(
   limit: number = 20,
   offset: number = 0
 ): Promise<ArticleWithScore[]> {
-  // Get user settings for explicit preferences
-  let userSettings = null;
-  if (userId) {
-    userSettings = await prisma.userSetting.findUnique({
-      where: { userId }
-    });
-  }
+  const cacheKey = `recommendations:${userId || 'anon'}:${limit}:${offset}`;
+  
+  return Cache.getOrSet(cacheKey, async () => {
+    // Get user settings for explicit preferences
+    let userSettings = null;
+    if (userId) {
+      userSettings = await prisma.userSetting.findUnique({
+        where: { userId }
+      });
+    }
 
-  // Get user rating history
-  const userRatings = await prisma.userRating.findMany({
-    where: userId ? { userId } : undefined,
-    include: {
-      article: {
-        include: {
-          source: true
+    // Get user rating history
+    const userRatings = await prisma.userRating.findMany({
+      where: userId ? { userId } : undefined,
+      include: {
+        article: {
+          include: {
+            source: true
+          }
         }
-      }
-    },
-    orderBy: {
-      createdAt: 'desc'
-    },
-    take: 100 // Consider last 100 ratings for preference learning
-  });
+      },
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 100 // Consider last 100 ratings for preference learning
+    });
 
-  // Get user interaction history for enhanced personalization
-  const userInteractions = await prisma.userInteraction.findMany({
-    where: userId ? { userId } : undefined,
-    orderBy: {
-      createdAt: 'desc'
-    },
-    take: 200 // Consider last 200 interactions
-  });
+    // Get user interaction history for enhanced personalization
+    const userInteractions = await prisma.userInteraction.findMany({
+      where: userId ? { userId } : undefined,
+      orderBy: {
+        createdAt: 'desc'
+      },
+      take: 200 // Consider last 200 interactions
+    });
 
-  // Get collaborative filtering recommendations
-  let collaborativeArticleIds: string[] = [];
+    // Get collaborative filtering recommendations
+    let collaborativeArticleIds: string[] = [];
   if (userId && userRatings.length >= 3) {
     const similarUsers = await findSimilarUsers(userId, 3);
     if (similarUsers.length > 0) {
@@ -272,7 +276,13 @@ export async function getRecommendedArticles(
       }
     },
     include: {
-      source: true,
+      source: {
+        select: {
+          name: true,
+          credibilityRating: true,
+          credibilityReason: true
+        }
+      },
       userRatings: true
     },
     orderBy: {
@@ -380,6 +390,7 @@ export async function getRecommendedArticles(
   
   // Return paginated results
   return scoredArticles.slice(offset, offset + limit);
+  }, { ttl: 300 }); // Cache for 5 minutes
 }
 
 // Get user statistics

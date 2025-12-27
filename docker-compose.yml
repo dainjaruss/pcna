@@ -34,6 +34,8 @@ services:
       DATABASE_URL: postgresql://popculture:${POSTGRES_PASSWORD:-popculture_password}@postgres:5432/popculture_db?schema=public
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       NODE_ENV: production
+      # JWT Authentication
+      JWT_SECRET: ${JWT_SECRET}
       # Email settings
       SMTP_HOST: ${SMTP_HOST}
       SMTP_PORT: ${SMTP_PORT}
@@ -58,11 +60,11 @@ services:
       - ./prisma:/app/prisma
     command: sh -c "./docker-entrypoint.sh"
     healthcheck:
-      test: [ "CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1" ]
+      test: [ "CMD-SHELL", "node -e \"require('http').get('http://localhost:3000/api/health', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))\"" ]
       interval: 30s
-      timeout: 5s
+      timeout: 10s
       retries: 3
-      start_period: 10s
+      start_period: 30s
 
   # Cron Jobs Service (Optional - only needed if USE_BUILTIN_CRON=true)
   # If using n8n for scheduling, you can remove this service or leave it disabled

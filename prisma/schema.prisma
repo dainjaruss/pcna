@@ -33,6 +33,8 @@ model Article {
   @@index([sourceId])
   @@index([createdAt(sort: Desc)])
   @@index([archived])
+  @@index([categories])
+  @@index([publishDate(sort: Desc), sourceId])
 }
 
 model UserRating {
@@ -48,6 +50,7 @@ model UserRating {
   @@index([articleId])
   @@index([rating])
   @@index([userId])
+  @@index([userId, articleId])
 }
 
 model Setting {
@@ -90,6 +93,8 @@ model UserSetting {
   preferredCategories  String[] @default([])
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  
+  @@index([userId])
 }
 
 model Summary {
@@ -128,23 +133,27 @@ model UserInteraction {
   @@index([userId, interactionType])
   @@index([articleId])
   @@index([createdAt])
+  @@index([interactionType])
 }
 
 // Make Source optionally owned by a User and mark custom flag
 model Source {
-  id               String    @id @default(cuid())
-  name             String    @unique
-  url              String
-  enabled          Boolean   @default(true)
-  credibilityRating Int      @default(5) // 1-10 scale
-  type             String    @default("rss") // rss, scrape, api
-  rssUrl           String?
-  isCustom         Boolean   @default(false)
-  owner           User?      @relation("OwnerSources", fields: [ownerId], references: [id], onDelete: Cascade)
-  ownerId         String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  articles         Article[]
+  id                    String    @id @default(cuid())
+  name                  String    @unique
+  url                   String
+  enabled               Boolean   @default(true)
+  credibilityRating     Int      @default(5) // 1-10 scale
+  credibilityReason     String?  // AI-generated explanation
+  lastCredibilityCheck  DateTime @default(now())
+  credibilityHistory    Json?    // Track score changes over time
+  type                  String    @default("rss") // rss, scrape, api
+  rssUrl                String?
+  isCustom              Boolean   @default(false)
+  owner                 User?     @relation("OwnerSources", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId               String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  articles              Article[]
   
   @@index([enabled])
 }

@@ -13,9 +13,10 @@ interface SearchFilters {
 interface SearchBarProps {
   onSearch: (filters: SearchFilters) => void
   isSearching: boolean
+  isLoading?: boolean
 }
 
-export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
+export function SearchBar({ onSearch, isSearching, isLoading = false }: SearchBarProps) {
   const [filters, setFilters] = useState<SearchFilters>({
     query: '',
     source: '',
@@ -70,10 +71,10 @@ export function SearchBar({ onSearch, isSearching }: SearchBarProps) {
           </div>
           <button
             type="submit"
-            disabled={isSearching}
-            className="px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors disabled:opacity-50 whitespace-nowrap"
+            disabled={isLoading}
+            className={`px-6 py-3 text-white rounded-lg transition-colors whitespace-nowrap ${isLoading ? 'bg-purple-400 cursor-not-allowed' : 'bg-purple-600 hover:bg-purple-700'}`}
           >
-            {isSearching ? 'Searching...' : 'Search'}
+            {isLoading ? '🔄 Searching...' : isSearching ? 'Update Search' : 'Search'}
           </button>
           <button
             type="button"

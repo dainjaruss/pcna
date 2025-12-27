@@ -6,6 +6,20 @@ A self-hostable Next.js web application that aggregates pop culture news from mu
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.3-blue)
 ![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-blue)
 ![Docker](https://img.shields.io/badge/Docker-Compose-blue)
+![Version](https://img.shields.io/badge/Version-1.0.0-green)
+![Tests](https://img.shields.io/badge/Tests-20%20Passing-brightgreen)
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Quick Start](./QUICK_START.md) | Get running in 5 minutes |
+| [User Guide](./docs/USER_GUIDE.md) | End-user documentation |
+| [Admin Guide](./docs/ADMIN_GUIDE.md) | Administrator documentation |
+| [API Documentation](./docs/API_DOCUMENTATION.md) | Complete API reference |
+| [Deployment Guide](./DEPLOYMENT_GUIDE.md) | Production deployment |
+| [Security Audit](./docs/SECURITY_AUDIT.md) | Security implementation details |
+| [Changelog](./CHANGELOG.md) | Version history |
 
 ## ✨ Features
 
@@ -17,6 +31,16 @@ A self-hostable Next.js web application that aggregates pop culture news from mu
 - 📧 **Daily Email Summaries**: Automated emails with top articles based on your preferences
 - 🌓 **Dark/Light Mode**: Toggle between themes with persistence
 - 📱 **Responsive Design**: Works perfectly on desktop, tablet, and mobile devices
+- 👤 **Multi-User Support**: User registration, authentication, and personalization
+- 🛡️ **Admin Panel**: Full administration dashboard at `/admin`
+
+### Admin Features
+- 📊 **Dashboard**: Real-time stats and system status
+- 👥 **User Management**: Promote, view, and delete users
+- 📰 **Source Management**: Add, enable/disable, and manage news sources
+- 💾 **Database Operations**: Backup, optimize, and cleanup
+- 📈 **Performance Monitoring**: Response times, cache metrics, system resources
+- ⚙️ **System Settings**: Configure all application settings
 
 ### Configuration Options
 - ⏱️ **Refresh Frequency**: Set news fetch interval (4, 6, 8, 12, or 24 hours)

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
 import { getAuthFromRequest } from '@/lib/auth';
+import { analyzeSourceCredibility } from '@/lib/credibility';
 
 // GET /api/sources - Get all sources
 export async function GET() {
@@ -124,9 +125,8 @@ export async function DELETE(request: NextRequest) {
 // POST /api/sources - Create a new custom source (validated)
 const createSchema = z.object({
   name: z.string().min(1),
-  url: z.string().url(),
-  rssUrl: z.string().url().optional(),
-  credibilityRating: z.number().min(1).max(10).optional(),
+  url: z.string().min(1),
+  rssUrl: z.string().optional(),
   type: z.enum(['rss', 'scrape', 'api']).optional(),
 })
 
@@ -138,28 +138,73 @@ export async function POST(request: NextRequest) {
     const auth = getAuthFromRequest(request as any);
     const ownerId = auth?.sub ?? null;
 
-    if (parsed.rssUrl) {
+    // Normalize URLs - add https:// if missing
+    const normalizeUrl = (url: string): string => {
+      if (!url.startsWith('http://') && !url.startsWith('https://')) {
+        return `https://${url}`;
+      }
+      return url;
+    };
+
+    const normalizedUrl = normalizeUrl(parsed.url);
+    const normalizedRssUrl = parsed.rssUrl ? normalizeUrl(parsed.rssUrl) : undefined;
+
+    // Validate URLs are properly formed
+    try {
+      new URL(normalizedUrl);
+      if (normalizedRssUrl) {
+        new URL(normalizedRssUrl);
+      }
+    } catch (error) {
+      return NextResponse.json({ error: 'Invalid URL format' }, { status: 400 });
+    }
+
+    if (normalizedRssUrl) {
       try {
-        const res = await fetch(parsed.rssUrl, { method: 'GET' });
+        const res = await fetch(normalizedRssUrl, { method: 'GET' });
         if (!res.ok) return NextResponse.json({ error: 'Unable to fetch rssUrl for validation' }, { status: 400 });
       } catch (e) {
         return NextResponse.json({ error: 'Failed to validate rssUrl' }, { status: 400 });
       }
     }
 
+    // Perform automated credibility analysis
+    console.log(`Analyzing credibility for ${parsed.name}...`);
+    const credibilityAnalysis = await analyzeSourceCredibility(parsed.name, normalizedUrl);
+
+    // Create credibility history entry
+    const credibilityHistory = [{
+      date: new Date().toISOString(),
+      score: credibilityAnalysis.score,
+      reason: credibilityAnalysis.reason,
+      confidence: credibilityAnalysis.confidence
+    }];
+
     const src = await prisma.source.create({
       data: {
         name: parsed.name,
-        url: parsed.url,
-        rssUrl: parsed.rssUrl,
-        credibilityRating: parsed.credibilityRating ?? 5,
+        url: normalizedUrl,
+        rssUrl: normalizedRssUrl,
+        credibilityRating: credibilityAnalysis.score,
+        credibilityReason: credibilityAnalysis.reason,
+        lastCredibilityCheck: new Date(),
+        credibilityHistory: credibilityHistory,
         type: parsed.type ?? 'rss',
         isCustom: true,
         ownerId: ownerId,
       },
     });
 
-    return NextResponse.json(src);
+    return NextResponse.json({
+      ...src,
+      credibilityAnalysis: {
+        score: credibilityAnalysis.score,
+        reason: credibilityAnalysis.reason,
+        strengths: credibilityAnalysis.strengths,
+        concerns: credibilityAnalysis.concerns,
+        confidence: credibilityAnalysis.confidence
+      }
+    });
   } catch (error: any) {
     console.error('Error creating source:', error);
     return NextResponse.json({ error: error.message || 'Failed to create source' }, { status: 400 });
