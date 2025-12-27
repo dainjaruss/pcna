@@ -1,11 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
+
+export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma';
 import { getRecommendedArticles } from '@/lib/recommendations';
 
 // GET /api/articles - Get articles (with optional pagination and filtering)
 export async function GET(request: NextRequest) {
   try {
-    const searchParams = request.nextUrl.searchParams;
+    const url = new URL(request.url);
+    const searchParams = url.searchParams;
     const page = parseInt(searchParams.get('page') || '1');
     const limit = parseInt(searchParams.get('limit') || '20');
     const useRecommendations = searchParams.get('recommended') === 'true';

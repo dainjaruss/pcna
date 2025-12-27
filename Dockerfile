@@ -8,7 +8,8 @@ WORKDIR /app
 
 # Copy package files
 COPY package.json package-lock.json* ./
-RUN npm install --ignore-scripts  # Removed --production to include dev deps needed for build; kept --ignore-scripts for Prisma
+# Use --legacy-peer-deps to avoid strict peer dependency resolution in container builds
+RUN npm install --ignore-scripts --legacy-peer-deps  # Removed --production to include dev deps needed for build; kept --ignore-scripts for Prisma
 
 # Rebuild the source code only when needed
 FROM base AS builder
@@ -22,6 +23,7 @@ RUN npx prisma generate
 
 # Build Next.js application
 ENV NEXT_TELEMETRY_DISABLED 1
+ENV NODE_OPTIONS=--max-old-space-size=2048
 RUN npm run build
 
 # Production image, copy all the files and run next
@@ -68,4 +70,9 @@ EXPOSE 3000
 ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
+# Copy entrypoint and make executable
+COPY --from=builder --chown=nextjs:nodejs /app/scripts/docker-entrypoint.sh ./docker-entrypoint.sh
+RUN chmod +x ./docker-entrypoint.sh
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
 CMD ["node", "server.js"]

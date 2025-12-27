@@ -1,0 +1,11 @@
+HTTP/1.1 200 OK
+Server: openresty
+Date: Fri, 26 Dec 2025 21:58:42 GMT
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: keep-alive
+vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Url
+Strict-Transport-Security: max-age=63072000; preload
+X-Served-By: popcna.duckdns.org
+
+{"user":{"id":"cmjneyiwy0005zc15j6uv00n7","email":"smoke+@example.com","name":null}}

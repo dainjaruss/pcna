@@ -1,5 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { z } from 'zod';
+import { getAuthFromRequest } from '@/lib/auth';
 
 // GET /api/sources - Get all sources
 export async function GET() {
@@ -61,5 +63,50 @@ export async function PUT(request: NextRequest) {
       { error: 'Failed to update source' },
       { status: 500 }
     );
+  }
+}
+
+// POST /api/sources - Create a new custom source (validated)
+const createSchema = z.object({
+  name: z.string().min(1),
+  url: z.string().url(),
+  rssUrl: z.string().url().optional(),
+  credibilityRating: z.number().min(1).max(10).optional(),
+  type: z.enum(['rss', 'scrape', 'api']).optional(),
+})
+
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const parsed = createSchema.parse(body);
+
+    const auth = getAuthFromRequest(request as any);
+    const ownerId = auth?.sub ?? null;
+
+    if (parsed.rssUrl) {
+      try {
+        const res = await fetch(parsed.rssUrl, { method: 'GET' });
+        if (!res.ok) return NextResponse.json({ error: 'Unable to fetch rssUrl for validation' }, { status: 400 });
+      } catch (e) {
+        return NextResponse.json({ error: 'Failed to validate rssUrl' }, { status: 400 });
+      }
+    }
+
+    const src = await prisma.source.create({
+      data: {
+        name: parsed.name,
+        url: parsed.url,
+        rssUrl: parsed.rssUrl,
+        credibilityRating: parsed.credibilityRating ?? 5,
+        type: parsed.type ?? 'rss',
+        isCustom: true,
+        ownerId: ownerId,
+      },
+    });
+
+    return NextResponse.json(src);
+  } catch (error: any) {
+    console.error('Error creating source:', error);
+    return NextResponse.json({ error: error.message || 'Failed to create source' }, { status: 400 });
   }
 }

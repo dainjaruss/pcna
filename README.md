@@ -357,6 +357,17 @@ docker-compose exec postgres psql -U popculture popculture_db
 5. **Rate Limiting**: Configure rate limiting in nginx for public access
 6. **Firewall**: Only expose necessary ports
 
+### Redis Rate Limiting
+
+- For production, set `REDIS_URL` (or `REDIS_HOST`/`REDIS_PORT`) in your environment. The app uses Redis for rate-limiting auth endpoints.
+- Example `.env` entries:
+
+```env
+REDIS_URL=redis://redis:6379
+```
+
+If Redis is unavailable, the rate limiter fails open to avoid blocking legitimate users; however, it's recommended to run Redis in production for reliable protection.
+
 ## 🆘 Troubleshooting
 
 ### App won't start
@@ -479,3 +490,21 @@ For issues or questions:
 Built with ❤️ for pop culture enthusiasts
 
 **Note**: This application is designed for personal use. Please respect the terms of service of the news sources being aggregated.
+
+## Smoke Tests
+
+There is a lightweight smoke-test that exercises the authentication flow (register → login → GET /api/auth/me). It's intended for manual use and optional CI runs against non-production environments.
+
+- Local: run the script directly:
+
+```bash
+./scripts/smoke-test.sh [BASE_URL]
+# default BASE_URL is https://popcna.duckdns.org
+```
+
+- CI: a GitHub Actions workflow is included at `.github/workflows/smoke-test.yml`. The workflow only runs when the repository secret `SMOKE_BASE_URL` is configured.
+
+Security and safeguards:
+- The cleanup step that deletes the created user is gated behind the `ALLOW_DELETE=true` environment variable. Do NOT set this in CI unless your target environment is a disposable test or staging instance.
+- The CI workflow expects `SMOKE_BASE_URL` to be set in repository secrets; it will skip running if not present.
+- The smoke test avoids persisting tokens to the repo; token payloads are only decoded in-memory for verification.

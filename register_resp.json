@@ -1,0 +1,13 @@
+HTTP/1.1 200 OK
+Server: openresty
+Date: Fri, 26 Dec 2025 21:58:41 GMT
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: keep-alive
+vary: RSC, Next-Router-State-Tree, Next-Router-Prefetch, Next-Url
+set-cookie: access_token=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJjbWpuZXlpd3kwMDA1emMxNWo2dXYwMG43IiwiZW1haWwiOiJzbW9rZStAZXhhbXBsZS5jb20iLCJpYXQiOjE3NjY3ODYzMjEsImV4cCI6MTc2Njg3MjcyMX0.IAUdRihROUs0rf6V_o0U-CbrTMiePTPq7NSsIUGYOLQ; Path=/; Expires=Sat, 27 Dec 2025 21:58:41 GMT; Max-Age=86400; Secure; HttpOnly; SameSite=lax
+set-cookie: refresh_token=0f514e39d38fc038f997c50ea5660fcc2277caaece5ecfb33a3969ec83ea768d2a4ab4f055182adece41b98f29e4458bd6d81dea2182545ac9889ac14759e4fa; Path=/; Expires=Sun, 25 Jan 2026 21:58:41 GMT; Secure; HttpOnly; SameSite=lax
+Strict-Transport-Security: max-age=63072000; preload
+X-Served-By: popcna.duckdns.org
+
+{"user":{"id":"cmjneyiwy0005zc15j6uv00n7","email":"smoke+@example.com","name":null}}

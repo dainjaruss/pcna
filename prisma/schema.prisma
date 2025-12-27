@@ -10,21 +10,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-model Source {
-  id               String    @id @default(cuid())
-  name             String    @unique
-  url              String
-  enabled          Boolean   @default(true)
-  credibilityRating Int      @default(5) // 1-10 scale
-  type             String    @default("rss") // rss, scrape, api
-  rssUrl           String?
-  createdAt        DateTime  @default(now())
-  updatedAt        DateTime  @updatedAt
-  articles         Article[]
-  
-  @@index([enabled])
-}
-
 model Article {
   id                String       @id @default(cuid())
   title             String
@@ -71,4 +56,68 @@ model EmailRecipient {
   email     String   @unique
   active    Boolean  @default(true)
   createdAt DateTime @default(now())
+}
+
+// New models for multi-user and summarization features
+model User {
+  id           String    @id @default(cuid())
+  email        String    @unique
+  passwordHash String
+  name         String?
+  isAdmin      Boolean   @default(false)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  sources      Source[]  @relation("OwnerSources")
+  settings     UserSetting?
+  refreshTokens RefreshToken[]
+}
+
+model UserSetting {
+  id             String   @id @default(cuid())
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId         String   @unique
+  retentionDays  Int      @default(30)
+  dailySummaryAt String?  // e.g. "06:00"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+}
+
+model Summary {
+  id         String   @id @default(cuid())
+  title      String
+  content    String   @db.Text
+  citations  String[] @default([])
+  generatedAt DateTime @default(now())
+  sourceIds  String[] @default([])
+  authorId   String?  
+}
+
+model RefreshToken {
+  id         String   @id @default(cuid())
+  tokenHash  String   @unique
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId     String
+  expiresAt  DateTime
+  revoked    Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  replacedBy String?
+}
+
+// Make Source optionally owned by a User and mark custom flag
+model Source {
+  id               String    @id @default(cuid())
+  name             String    @unique
+  url              String
+  enabled          Boolean   @default(true)
+  credibilityRating Int      @default(5) // 1-10 scale
+  type             String    @default("rss") // rss, scrape, api
+  rssUrl           String?
+  isCustom         Boolean   @default(false)
+  owner           User?      @relation("OwnerSources", fields: [ownerId], references: [id], onDelete: Cascade)
+  ownerId         String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  articles         Article[]
+  
+  @@index([enabled])
 }

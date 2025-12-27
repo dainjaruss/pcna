@@ -1,0 +1,38 @@
+name: Smoke Test
+
+on:
+  workflow_dispatch: {}
+  pull_request:
+    types: [opened, synchronize, reopened]
+
+jobs:
+  smoke_test:
+    if: ${{ secrets.SMOKE_BASE_URL != '' }}
+    runs-on: ubuntu-latest
+    env:
+      BASE_URL: ${{ secrets.SMOKE_BASE_URL }}
+      ALLOW_DELETE: ${{ secrets.SMOKE_ALLOW_DELETE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run smoke test
+        run: |
+          chmod +x ./scripts/smoke-test.sh
+          ./scripts/smoke-test.sh "$BASE_URL"
+
+      - name: Note about cleanup
+        run: |
+          if [ "${ALLOW_DELETE}" = "true" ]; then
+            echo "ALLOW_DELETE=true : workflow will request delete step (ensure this is a safe staging environment)"
+          else
+            echo "ALLOW_DELETE not set or false: cleanup (user deletion) will be skipped"
+          fi

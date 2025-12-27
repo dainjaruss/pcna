@@ -50,11 +50,19 @@ services:
       # Cron and API security
       USE_BUILTIN_CRON: ${USE_BUILTIN_CRON:-false}
       API_KEY: ${API_KEY}
+      # Redis (optional): used for rate-limiting and caching
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     ports:
       - "3000:3000"
     volumes:
       - ./prisma:/app/prisma
-    command: sh -c "npx prisma migrate deploy && node scripts/init-db.js && node server.js"
+    command: sh -c "./docker-entrypoint.sh"
+    healthcheck:
+      test: [ "CMD-SHELL", "curl -f http://localhost:3000/api/health || exit 1" ]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
 
   # Cron Jobs Service (Optional - only needed if USE_BUILTIN_CRON=true)
   # If using n8n for scheduling, you can remove this service or leave it disabled
@@ -72,10 +80,28 @@ services:
       NEXT_PUBLIC_APP_URL: http://app:3000
       NODE_ENV: production
       USE_BUILTIN_CRON: ${USE_BUILTIN_CRON:-false}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
     command: node scripts/cron-jobs.js
     # Uncomment to disable cron service when using n8n
     # profiles: ["disabled"]
+  redis:
+    image: redis:7-alpine
+    container_name: popculture-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD-SHELL", "redis-cli ping | grep PONG || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:
+    driver: local
+
+  # Optional: redis data persistence
+  redis_data:
     driver: local
