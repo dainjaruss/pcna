@@ -66,6 +66,61 @@ export async function PUT(request: NextRequest) {
   }
 }
 
+// DELETE /api/sources - Delete a custom source
+export async function DELETE(request: NextRequest) {
+  try {
+    const url = new URL(request.url);
+    const id = url.searchParams.get('id');
+    
+    if (!id) {
+      return NextResponse.json(
+        { error: 'Missing source ID' },
+        { status: 400 }
+      );
+    }
+    
+    // Check if source exists and is custom
+    const source = await prisma.source.findUnique({
+      where: { id }
+    });
+    
+    if (!source) {
+      return NextResponse.json(
+        { error: 'Source not found' },
+        { status: 404 }
+      );
+    }
+    
+    if (!source.isCustom) {
+      return NextResponse.json(
+        { error: 'Cannot delete built-in sources' },
+        { status: 403 }
+      );
+    }
+    
+    // Check ownership if authenticated
+    const auth = getAuthFromRequest(request as any);
+    if (auth?.sub && source.ownerId && source.ownerId !== auth.sub) {
+      return NextResponse.json(
+        { error: 'You can only delete your own custom sources' },
+        { status: 403 }
+      );
+    }
+    
+    await prisma.source.delete({
+      where: { id }
+    });
+    
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting source:', error);
+    return NextResponse.json(
+      { error: 'Failed to delete source' },
+      { status: 500 }
+    );
+  }
+}
+
 // POST /api/sources - Create a new custom source (validated)
 const createSchema = z.object({
   name: z.string().min(1),

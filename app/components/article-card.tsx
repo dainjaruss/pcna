@@ -16,6 +16,8 @@ interface Article {
   }
   userRatings: Array<{ rating: number }>
   celebrities: string[]
+  highlightedTitle?: string
+  highlightedSummary?: string
 }
 
 interface ArticleCardProps {
@@ -89,9 +91,12 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
     year: 'numeric'
   })
 
-  const summary = article.summary.length > 150 && !showFullSummary
-    ? article.summary.slice(0, 150) + '...'
-    : article.summary
+  const displayTitle = article.highlightedTitle || article.title
+  const displaySummary = article.highlightedSummary || article.summary
+  
+  const summary = displaySummary.length > 150 && !showFullSummary
+    ? displaySummary.slice(0, 150) + '...'
+    : displaySummary
 
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md overflow-hidden hover:shadow-xl transition-shadow">
@@ -122,13 +127,21 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
 
         <h3 className="text-lg font-bold mb-2 line-clamp-2 hover:text-purple-600 dark:hover:text-purple-400 transition-colors">
           <a href={article.url} target="_blank" rel="noopener noreferrer">
-            {article.title}
+            {article.highlightedTitle ? (
+              <span dangerouslySetInnerHTML={{ __html: displayTitle }} />
+            ) : (
+              displayTitle
+            )}
           </a>
         </h3>
 
         <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">
-          {summary}
-          {article.summary.length > 150 && (
+          {article.highlightedSummary ? (
+            <span dangerouslySetInnerHTML={{ __html: summary }} />
+          ) : (
+            summary
+          )}
+          {displaySummary.length > 150 && (
             <button
               onClick={() => setShowFullSummary(!showFullSummary)}
               className="ml-1 text-purple-600 dark:text-purple-400 hover:underline"

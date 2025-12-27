@@ -34,6 +34,8 @@ model Article {
 
 model UserRating {
   id        String   @id @default(cuid())
+  user      User?    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId    String?
   article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
   articleId String
   rating    Int      // 1-5 stars or 1-10 scale
@@ -42,6 +44,7 @@ model UserRating {
   
   @@index([articleId])
   @@index([rating])
+  @@index([userId])
 }
 
 model Setting {
@@ -70,6 +73,7 @@ model User {
   sources      Source[]  @relation("OwnerSources")
   settings     UserSetting?
   refreshTokens RefreshToken[]
+  ratings      UserRating[]
 }
 
 model UserSetting {

@@ -20,13 +20,23 @@ interface ArticleWithScore {
   score?: number;
 }
 
-// Get recommended articles based on user ratings
+// Get recommended articles based on user ratings and explicit preferences
 export async function getRecommendedArticles(
+  userId?: string,
   limit: number = 20,
   offset: number = 0
 ): Promise<ArticleWithScore[]> {
+  // Get user settings for explicit preferences
+  let userSettings = null;
+  if (userId) {
+    userSettings = await prisma.userSetting.findUnique({
+      where: { userId }
+    });
+  }
+
   // Get user rating history
   const userRatings = await prisma.userRating.findMany({
+    where: userId ? { userId } : undefined,
     include: {
       article: {
         include: {
@@ -76,6 +86,23 @@ export async function getRecommendedArticles(
       (preferredSources.get(rating.article.source.name) || 0) + weight
     );
   });
+  
+  // Add explicit user preferences with high weight
+  if (userSettings) {
+    userSettings.preferredCelebrities.forEach(celeb => {
+      preferredCelebrities.set(
+        celeb,
+        (preferredCelebrities.get(celeb) || 0) + 5 // High weight for explicit preferences
+      );
+    });
+    
+    userSettings.preferredCategories.forEach(cat => {
+      preferredCategories.set(
+        cat,
+        (preferredCategories.get(cat) || 0) + 3 // Moderate weight for explicit preferences
+      );
+    });
+  }
   
   // Get recent articles (not already rated)
   const ratedArticleIds = userRatings.map(r => r.articleId);

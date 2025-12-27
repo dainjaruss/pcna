@@ -175,10 +175,19 @@ export async function fetchAllNews() {
       
       let articles: ParsedArticle[] = [];
       
-      if (source.type === 'scrape' && source.name === 'MediaTakeOut') {
-        articles = await scrapeMediaTakeOut();
+      if (source.type === 'scrape') {
+        if (source.name === 'MediaTakeOut') {
+          articles = await scrapeMediaTakeOut();
+        } else {
+          // Generic scraping for custom sources
+          articles = await scrapeGenericWebsite(source.url);
+        }
       } else if (source.type === 'rss' && source.rssUrl) {
         articles = await fetchRSSFeed(source.rssUrl);
+      } else if (source.type === 'api') {
+        // For now, skip API sources (could be implemented later)
+        console.log(`Skipping API source ${source.name} - not implemented yet`);
+        continue;
       }
       
       // Add source info to articles
@@ -227,6 +236,95 @@ export async function fetchAllNews() {
   } catch (error) {
     console.error('Error in fetchAllNews:', error);
     throw error;
+  }
+}
+
+// Generic website scraper for custom sources
+export async function scrapeGenericWebsite(url: string): Promise<ParsedArticle[]> {
+  try {
+    const response = await axios.get(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+      },
+      timeout: 10000
+    });
+    
+    const $ = cheerio.load(response.data);
+    const articles: ParsedArticle[] = [];
+    
+    // Generic selectors for common article structures
+    const selectors = [
+      'article',
+      '.post',
+      '.entry',
+      '.article',
+      '.news-item',
+      '.story',
+      '[class*="post"]',
+      '[class*="article"]',
+      '[class*="news"]'
+    ];
+    
+    let foundArticles = 0;
+    
+    for (const selector of selectors) {
+      if (foundArticles >= 10) break; // Limit articles per source
+      
+      $(selector).each((_, element) => {
+        if (foundArticles >= 10) return false;
+        
+        const $article = $(element);
+        
+        // Try various title selectors
+        const titleSelectors = ['h1', 'h2', 'h3', '.title', '.headline', '.entry-title', '.post-title', '[class*="title"]'];
+        let title = '';
+        for (const titleSel of titleSelectors) {
+          title = $article.find(titleSel).first().text().trim();
+          if (title) break;
+        }
+        
+        // Get link
+        const link = $article.find('a').first().attr('href') || $article.closest('a').attr('href');
+        
+        // Get summary/content
+        const contentSelectors = ['.content', '.summary', '.excerpt', '.entry-content', '.post-content', 'p'];
+        let summary = '';
+        for (const contentSel of contentSelectors) {
+          summary = $article.find(contentSel).first().text().trim();
+          if (summary) break;
+        }
+        
+        // Get image
+        const imageUrl = $article.find('img').first().attr('src') || 
+                        $article.find('img').first().attr('data-src') ||
+                        $article.find('[class*="image"]').find('img').attr('src');
+        
+        if (title && link && foundArticles < 10) {
+          const fullUrl = link.startsWith('http') ? link : new URL(link, url).href;
+          const celebrities = extractCelebrities(`${title} ${summary}`);
+          
+          articles.push({
+            title,
+            url: fullUrl,
+            summary: summary || title,
+            imageUrl: imageUrl ? (imageUrl.startsWith('http') ? imageUrl : new URL(imageUrl, url).href) : undefined,
+            publishDate: new Date(),
+            categories: ['news'], // Generic category
+            celebrities
+          });
+          
+          foundArticles++;
+        }
+      });
+      
+      if (foundArticles > 0) break; // If we found articles with this selector, stop trying others
+    }
+    
+    console.log(`Scraped ${articles.length} articles from ${url}`);
+    return articles;
+  } catch (error) {
+    console.error(`Error scraping ${url}:`, error);
+    return [];
   }
 }
 

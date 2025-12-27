@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const dynamic = 'force-dynamic'
 import { prisma } from '@/lib/prisma';
 import { getRecommendedArticles } from '@/lib/recommendations';
+import { getAuthFromRequest } from '@/lib/auth';
 
 // GET /api/articles - Get articles (with optional pagination and filtering)
 export async function GET(request: NextRequest) {
@@ -19,7 +20,8 @@ export async function GET(request: NextRequest) {
     
     // If recommendations are enabled, use recommendation algorithm
     if (useRecommendations) {
-      const articles = await getRecommendedArticles(limit, offset);
+      const auth = getAuthFromRequest(request as any);
+      const articles = await getRecommendedArticles(auth?.sub, limit, offset);
       const total = await prisma.article.count();
       
       return NextResponse.json({

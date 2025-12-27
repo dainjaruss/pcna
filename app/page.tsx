@@ -1,7 +1,35 @@
+'use client'
+
+import { useState } from 'react'
 import { ArticleGrid } from './components/article-grid'
 import { StatsBar } from './components/stats-bar'
+import { SearchBar } from './components/search-bar'
+
+interface SearchFilters {
+  query: string
+  source: string
+  dateFrom: string
+  dateTo: string
+  category: string
+}
 
 export default function Home() {
+  const [searchFilters, setSearchFilters] = useState<SearchFilters | null>(null)
+  const [isSearching, setIsSearching] = useState(false)
+
+  const handleSearch = (filters: SearchFilters) => {
+    // Check if any filter has a value
+    const hasActiveFilters = Object.values(filters).some(value => value.trim() !== '')
+    
+    if (hasActiveFilters) {
+      setSearchFilters(filters)
+      setIsSearching(true)
+    } else {
+      setSearchFilters(null)
+      setIsSearching(false)
+    }
+  }
+
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-8">
@@ -13,9 +41,11 @@ export default function Home() {
         </p>
       </div>
       
+      <SearchBar onSearch={handleSearch} isSearching={isSearching} />
+      
       <StatsBar />
       
-      <ArticleGrid />
+      <ArticleGrid searchFilters={searchFilters} isSearchMode={!!searchFilters} />
     </div>
   )
 }

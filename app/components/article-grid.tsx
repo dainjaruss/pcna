@@ -18,20 +18,46 @@ interface Article {
   userRatings: Array<{ rating: number }>
   celebrities: string[]
   score?: number
+  highlightedTitle?: string
+  highlightedSummary?: string
 }
 
-export function ArticleGrid() {
+interface SearchFilters {
+  query: string
+  source: string
+  dateFrom: string
+  dateTo: string
+  category: string
+}
+
+interface ArticleGridProps {
+  searchFilters?: SearchFilters | null
+  isSearchMode?: boolean
+}
+
+export function ArticleGrid({ searchFilters, isSearchMode = false }: ArticleGridProps) {
   const [articles, setArticles] = useState<Article[]>([])
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [hasMore, setHasMore] = useState(true)
-  const [useRecommendations, setUseRecommendations] = useState(true)
+  const [useRecommendations, setUseRecommendations] = useState(!isSearchMode)
+  const [searchQuery, setSearchQuery] = useState<string | null>(null)
 
   useEffect(() => {
-    fetchArticles()
-  }, [page, useRecommendations])
+    if (searchFilters) {
+      // Search mode - reset and fetch with filters
+      setPage(1)
+      setArticles([])
+      fetchSearchResults(1)
+    } else {
+      // Normal mode
+      fetchArticles()
+    }
+  }, [page, useRecommendations, searchFilters])
 
   const fetchArticles = async () => {
+    if (isSearchMode && searchFilters) return; // Don't fetch normal articles in search mode
+
     try {
       setLoading(true)
       const response = await fetch(
@@ -49,6 +75,42 @@ export function ArticleGrid() {
       }
     } catch (error) {
       console.error('Error fetching articles:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  const fetchSearchResults = async (searchPage: number = 1) => {
+    if (!searchFilters) return;
+
+    try {
+      setLoading(true)
+      
+      const params = new URLSearchParams({
+        page: searchPage.toString(),
+        limit: '20'
+      });
+
+      if (searchFilters.query) params.append('query', searchFilters.query);
+      if (searchFilters.source) params.append('source', searchFilters.source);
+      if (searchFilters.dateFrom) params.append('dateFrom', searchFilters.dateFrom);
+      if (searchFilters.dateTo) params.append('dateTo', searchFilters.dateTo);
+      if (searchFilters.category) params.append('category', searchFilters.category);
+
+      const response = await fetch(`/api/search?${params}`)
+      
+      if (response.ok) {
+        const data = await response.json()
+        if (searchPage === 1) {
+          setArticles(data.articles)
+          setSearchQuery(data.query)
+        } else {
+          setArticles(prev => [...prev, ...data.articles])
+        }
+        setHasMore(data.pagination.page < data.pagination.totalPages)
+      }
+    } catch (error) {
+      console.error('Error searching articles:', error)
     } finally {
       setLoading(false)
     }

@@ -9,11 +9,18 @@ type User = {
   name?: string | null
 }
 
+type UserSettings = {
+  preferredCelebrities: string[]
+  preferredCategories: string[]
+}
+
 export default function ProfilePage() {
   const router = useRouter()
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [settings, setSettings] = useState<UserSettings>({ preferredCelebrities: [], preferredCategories: [] })
+  const [editing, setEditing] = useState(false)
 
   function getToken() {
     return null
@@ -38,6 +45,7 @@ export default function ProfilePage() {
         }
         const data = await res.json()
         setUser(data.user)
+        await fetchSettings()
       } catch (e: any) {
         setError(e.message || 'Failed to fetch')
       } finally {
@@ -47,9 +55,40 @@ export default function ProfilePage() {
     fetchMe()
   }, [])
 
+  const fetchSettings = async () => {
+    try {
+      const res = await fetch('/api/settings', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setSettings(data.settings || { preferredCelebrities: [], preferredCategories: [] })
+      }
+    } catch (e) {
+      console.error('Failed to fetch settings', e)
+    }
+  }
+
   function logout() {
     // Call server logout to clear httpOnly cookies
     fetch('/api/auth/logout', { method: 'POST', credentials: 'include' }).finally(() => router.push('/login'))
+  }
+
+  const saveSettings = async () => {
+    try {
+      const res = await fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify(settings)
+      })
+      if (res.ok) {
+        setEditing(false)
+        await fetchSettings()
+      } else {
+        alert('Failed to save settings')
+      }
+    } catch (e) {
+      alert('Error saving settings')
+    }
   }
 
   if (loading) return <div className="p-6">Loading...</div>
@@ -67,6 +106,44 @@ export default function ProfilePage() {
         <div><strong>Email:</strong> {user.email}</div>
         <div><strong>Name:</strong> {user.name || '—'}</div>
       </div>
+
+      <div className="mb-4">
+        <h2 className="text-lg font-semibold mb-2">Preferences</h2>
+        <div className="mb-2">
+          <strong>Preferred Celebrities:</strong> {settings.preferredCelebrities.join(', ') || 'None'}
+        </div>
+        <div className="mb-2">
+          <strong>Preferred Categories:</strong> {settings.preferredCategories.join(', ') || 'None'}
+        </div>
+        <button onClick={() => setEditing(!editing)} className="text-blue-600 hover:underline">
+          {editing ? 'Cancel' : 'Edit Preferences'}
+        </button>
+      </div>
+
+      {editing && (
+        <div className="mb-4 p-4 border rounded">
+          <div className="mb-2">
+            <label className="block text-sm font-medium">Preferred Celebrities (comma-separated)</label>
+            <input
+              type="text"
+              value={settings.preferredCelebrities.join(', ')}
+              onChange={(e) => setSettings({ ...settings, preferredCelebrities: e.target.value.split(',').map(s => s.trim()) })}
+              className="w-full border rounded p-2"
+            />
+          </div>
+          <div className="mb-2">
+            <label className="block text-sm font-medium">Preferred Categories (comma-separated)</label>
+            <input
+              type="text"
+              value={settings.preferredCategories.join(', ')}
+              onChange={(e) => setSettings({ ...settings, preferredCategories: e.target.value.split(',').map(s => s.trim()) })}
+              className="w-full border rounded p-2"
+            />
+          </div>
+          <button onClick={saveSettings} className="bg-blue-600 text-white px-4 py-2 rounded">Save</button>
+        </div>
+      )}
+
       <div className="space-y-3">
         <a href="/settings" className="text-blue-600">Edit preferences</a>
         <button onClick={logout} className="bg-red-600 text-white px-4 py-2 rounded">Logout</button>

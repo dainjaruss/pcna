@@ -6,8 +6,11 @@ interface Source {
   id: string
   name: string
   url: string
+  rssUrl?: string
   enabled: boolean
   credibilityRating: number
+  isCustom: boolean
+  type: string
   _count: {
     articles: number
   }
@@ -39,6 +42,17 @@ export default function SettingsPage() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null)
   const [fetchingNews, setFetchingNews] = useState(false)
+
+  // Custom source form state
+  const [showAddSource, setShowAddSource] = useState(false)
+  const [newSource, setNewSource] = useState({
+    name: '',
+    url: '',
+    rssUrl: '',
+    credibilityRating: 5,
+    type: 'rss' as 'rss' | 'scrape' | 'api'
+  })
+  const [addingSource, setAddingSource] = useState(false)
 
   useEffect(() => {
     fetchData()
@@ -195,6 +209,75 @@ export default function SettingsPage() {
     }
   }
 
+  const handleAddSource = async () => {
+    if (!newSource.name.trim() || !newSource.url.trim()) {
+      showMessage('error', 'Source name and URL are required')
+      return
+    }
+
+    // Basic URL validation
+    try {
+      new URL(newSource.url)
+      if (newSource.rssUrl) {
+        new URL(newSource.rssUrl)
+      }
+    } catch {
+      showMessage('error', 'Please enter valid URLs')
+      return
+    }
+
+    setAddingSource(true)
+    try {
+      const response = await fetch('/api/sources', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSource)
+      })
+
+      if (response.ok) {
+        const source = await response.json()
+        setSources([...sources, { ...source, _count: { articles: 0 } }])
+        setNewSource({
+          name: '',
+          url: '',
+          rssUrl: '',
+          credibilityRating: 5,
+          type: 'rss'
+        })
+        setShowAddSource(false)
+        showMessage('success', 'Custom source added successfully!')
+      } else {
+        const error = await response.json()
+        showMessage('error', error.error || 'Failed to add source')
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to add source')
+    } finally {
+      setAddingSource(false)
+    }
+  }
+
+  const handleDeleteSource = async (sourceId: string) => {
+    if (!confirm('Are you sure you want to delete this custom source? This action cannot be undone.')) {
+      return
+    }
+
+    try {
+      const response = await fetch(`/api/sources?id=${sourceId}`, {
+        method: 'DELETE'
+      })
+
+      if (response.ok) {
+        setSources(sources.filter(s => s.id !== sourceId))
+        showMessage('success', 'Source deleted successfully!')
+      } else {
+        showMessage('error', 'Failed to delete source')
+      }
+    } catch (error) {
+      showMessage('error', 'Failed to delete source')
+    }
+  }
+
   if (loading) {
     return (
       <div className="container mx-auto px-4 py-8">
@@ -283,20 +366,109 @@ export default function SettingsPage() {
       <section className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-xl font-semibold">News Sources</h2>
-          <button
-            onClick={handleFetchNews}
-            disabled={fetchingNews}
-            className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
-          >
-            {fetchingNews ? 'Fetching...' : '🔄 Fetch News Now'}
-          </button>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowAddSource(!showAddSource)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-sm"
+            >
+              {showAddSource ? 'Cancel' : '+ Add Custom Source'}
+            </button>
+            <button
+              onClick={handleFetchNews}
+              disabled={fetchingNews}
+              className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 text-sm"
+            >
+              {fetchingNews ? 'Fetching...' : '🔄 Fetch News Now'}
+            </button>
+          </div>
         </div>
+
+        {/* Add Custom Source Form */}
+        {showAddSource && (
+          <div className="mb-6 p-4 border-2 border-dashed border-gray-300 dark:border-gray-600 rounded-lg">
+            <h3 className="text-lg font-medium mb-4">Add Custom News Source</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Source Name *</label>
+                <input
+                  type="text"
+                  value={newSource.name}
+                  onChange={(e) => setNewSource({ ...newSource, name: e.target.value })}
+                  placeholder="e.g., TechCrunch"
+                  className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Website URL *</label>
+                <input
+                  type="url"
+                  value={newSource.url}
+                  onChange={(e) => setNewSource({ ...newSource, url: e.target.value })}
+                  placeholder="https://example.com"
+                  className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">RSS Feed URL</label>
+                <input
+                  type="url"
+                  value={newSource.rssUrl}
+                  onChange={(e) => setNewSource({ ...newSource, rssUrl: e.target.value })}
+                  placeholder="https://example.com/rss"
+                  className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Source Type</label>
+                <select
+                  value={newSource.type}
+                  onChange={(e) => setNewSource({ ...newSource, type: e.target.value as 'rss' | 'scrape' | 'api' })}
+                  className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                >
+                  <option value="rss">RSS Feed</option>
+                  <option value="scrape">Web Scraping</option>
+                  <option value="api">API</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Credibility Rating (1-10)</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="10"
+                  value={newSource.credibilityRating}
+                  onChange={(e) => setNewSource({ ...newSource, credibilityRating: parseInt(e.target.value) || 5 })}
+                  className="w-full px-4 py-2 border rounded-lg dark:bg-gray-700 dark:border-gray-600"
+                />
+              </div>
+            </div>
+            <div className="flex gap-2">
+              <button
+                onClick={handleAddSource}
+                disabled={addingSource}
+                className="px-6 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50"
+              >
+                {addingSource ? 'Adding...' : 'Add Source'}
+              </button>
+              <button
+                onClick={() => setShowAddSource(false)}
+                className="px-6 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
         
         <div className="space-y-3">
           {sources.map(source => (
             <div
               key={source.id}
-              className="flex items-center justify-between p-4 border rounded-lg dark:border-gray-700"
+              className={`flex items-center justify-between p-4 border rounded-lg ${
+                source.isCustom 
+                  ? 'border-green-300 dark:border-green-600 bg-green-50 dark:bg-green-900/20' 
+                  : 'dark:border-gray-700'
+              }`}
             >
               <div className="flex-1">
                 <div className="flex items-center gap-3">
@@ -307,13 +479,33 @@ export default function SettingsPage() {
                     className="w-4 h-4"
                   />
                   <div>
-                    <h3 className="font-medium">{source.name}</h3>
+                    <h3 className="font-medium flex items-center gap-2">
+                      {source.name}
+                      {source.isCustom && (
+                        <span className="text-xs bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 px-2 py-1 rounded">
+                          Custom
+                        </span>
+                      )}
+                    </h3>
                     <p className="text-sm text-gray-600 dark:text-gray-400">
                       {source._count.articles} articles • Credibility: {source.credibilityRating}/10
+                      {source.type && ` • Type: ${source.type}`}
+                    </p>
+                    <p className="text-xs text-gray-500 dark:text-gray-500">
+                      {source.url}
                     </p>
                   </div>
                 </div>
               </div>
+              {source.isCustom && (
+                <button
+                  onClick={() => handleDeleteSource(source.id)}
+                  className="text-red-600 hover:text-red-700 text-sm font-medium ml-4"
+                  title="Delete custom source"
+                >
+                  🗑️
+                </button>
+              )}
             </div>
           ))}
         </div>

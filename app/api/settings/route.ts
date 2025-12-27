@@ -1,9 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
+import { getAuthFromRequest } from '@/lib/auth';
 
-// GET /api/settings - Get all settings
-export async function GET() {
+// GET /api/settings - Get settings (global or user)
+export async function GET(request: NextRequest) {
   try {
+    const auth = getAuthFromRequest(request as any)
+    if (auth?.sub) {
+      // Return user settings
+      const userSettings = await prisma.userSetting.findUnique({
+        where: { userId: auth.sub }
+      })
+      return NextResponse.json({
+        settings: userSettings ? {
+          preferredCelebrities: userSettings.preferredCelebrities,
+          preferredCategories: userSettings.preferredCategories
+        } : { preferredCelebrities: [], preferredCategories: [] }
+      })
+    }
+
+    // Global settings
     const settings = await prisma.setting.findMany();
     
     // Convert to key-value object
@@ -32,9 +48,27 @@ export async function GET() {
 // PUT /api/settings - Update settings
 export async function PUT(request: NextRequest) {
   try {
+    const auth = getAuthFromRequest(request as any)
     const body = await request.json();
-    
-    // Update each setting
+
+    if (auth?.sub) {
+      // Update user settings
+      await prisma.userSetting.upsert({
+        where: { userId: auth.sub },
+        update: {
+          preferredCelebrities: body.preferredCelebrities || [],
+          preferredCategories: body.preferredCategories || []
+        },
+        create: {
+          userId: auth.sub,
+          preferredCelebrities: body.preferredCelebrities || [],
+          preferredCategories: body.preferredCategories || []
+        }
+      })
+      return NextResponse.json({ success: true })
+    }
+
+    // Update global settings
     for (const [key, value] of Object.entries(body)) {
       await prisma.setting.upsert({
         where: { key },
