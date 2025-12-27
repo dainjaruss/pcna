@@ -27,6 +27,8 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
   const [rating, setRating] = useState<number | null>(null)
   const [isRating, setIsRating] = useState(false)
   const [showFullSummary, setShowFullSummary] = useState(false)
+  const [aiSummary, setAiSummary] = useState<string | null>(null)
+  const [isSummarizing, setIsSummarizing] = useState(false)
 
   const userRating = article.userRatings.length > 0
     ? article.userRatings[article.userRatings.length - 1].rating
@@ -54,6 +56,29 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
       console.error('Error rating article:', error)
     } finally {
       setIsRating(false)
+    }
+  }
+
+  const handleSummarize = async () => {
+    if (isSummarizing || aiSummary) return
+
+    setIsSummarizing(true)
+    try {
+      const response = await fetch('/api/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: article.summary })
+      })
+      if (response.ok) {
+        const data = await response.json()
+        setAiSummary(data.summary)
+      } else {
+        setAiSummary('Failed to generate summary')
+      }
+    } catch (error) {
+      setAiSummary('Error generating summary')
+    } finally {
+      setIsSummarizing(false)
     }
   }
 
@@ -112,6 +137,24 @@ export function ArticleCard({ article, onRatingUpdate }: ArticleCardProps) {
             </button>
           )}
         </p>
+
+        {aiSummary && (
+          <div className="mb-3 p-2 bg-blue-50 dark:bg-blue-900/20 rounded">
+            <p className="text-sm text-blue-800 dark:text-blue-200">
+              <strong>AI Summary:</strong> {aiSummary}
+            </p>
+          </div>
+        )}
+
+        <div className="flex gap-2 mb-3">
+          <button
+            onClick={handleSummarize}
+            disabled={isSummarizing || !!aiSummary}
+            className="text-xs px-3 py-1 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed"
+          >
+            {isSummarizing ? 'Summarizing...' : aiSummary ? 'Summarized' : 'AI Summary'}
+          </button>
+        </div>
 
         {article.celebrities.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-3">
