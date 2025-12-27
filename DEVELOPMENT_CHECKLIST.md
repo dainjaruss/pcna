@@ -78,11 +78,23 @@
 - [x] Update UI to display custom sources
 
 ### Phase 2: Article Search Functionality (Next Priority)
-1. [ ] Add search bar component to main page
-2. [ ] Implement search API endpoint
-3. [ ] Add filtering options (date, source, topic)
-4. [ ] Implement result highlighting
-5. [ ] Add pagination for search results
+- [x] Add search bar component to main page
+- [x] Implement search API endpoint
+- [x] Add filtering options (date, source, topic)
+- [x] Implement result highlighting
+- [x] Add pagination for search results
+
+### Phase 3: Fallback Web Search (Next Priority)
+- [x] Display "Search the web instead?" prompt when database search is empty
+- [x] Integrate web search API (configurable service)
+- [x] Display web results in similar format to local articles
+- [x] Add "save to database" functionality
+
+### Phase 4: Automatic Article Retention Management (Next Priority)
+1. [ ] Setting to specify number of days to keep articles (default: 30 days)
+2. [ ] Automated cleanup job to purge articles older than retention period
+3. [ ] Option to archive instead of delete (optional)
+4. [ ] Preserve user ratings even after article deletion
 
 ### Phase 3: Web Search Fallback
 1. [ ] Integrate web search API (Google/Bing/DuckDuckGo)

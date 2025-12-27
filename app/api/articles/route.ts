@@ -82,3 +82,71 @@ export async function GET(request: NextRequest) {
     );
   }
 }
+
+// POST /api/articles - Save a web search result to database
+export async function POST(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const { title, summary, url, content, publishDate, categories, celebrities } = body;
+
+    if (!title || !url) {
+      return NextResponse.json(
+        { error: 'Title and URL are required' },
+        { status: 400 }
+      );
+    }
+
+    // Find or create a "Web Search" source
+    let webSource = await prisma.source.findFirst({
+      where: { name: 'Web Search Results' }
+    });
+
+    if (!webSource) {
+      webSource = await prisma.source.create({
+        data: {
+          name: 'Web Search Results',
+          url: 'https://duckduckgo.com',
+          enabled: true,
+          credibilityRating: 5,
+          type: 'api',
+          isCustom: false
+        }
+      });
+    }
+
+    // Check if article already exists
+    const existingArticle = await prisma.article.findFirst({
+      where: { url }
+    });
+
+    if (existingArticle) {
+      return NextResponse.json(
+        { error: 'Article already exists in database' },
+        { status: 409 }
+      );
+    }
+
+    // Create the article
+    const article = await prisma.article.create({
+      data: {
+        title,
+        summary: summary || '',
+        content: content || summary || '',
+        url,
+        sourceId: webSource.id,
+        credibilityRating: 5, // Default credibility for web results
+        publishDate: publishDate ? new Date(publishDate) : new Date(),
+        categories: categories || [],
+        celebrities: celebrities || []
+      }
+    });
+
+    return NextResponse.json(article);
+  } catch (error) {
+    console.error('Error saving web result:', error);
+    return NextResponse.json(
+      { error: 'Failed to save article' },
+      { status: 500 }
+    );
+  }
+}

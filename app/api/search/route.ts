@@ -116,7 +116,8 @@ export async function GET(request: NextRequest) {
         total,
         totalPages: Math.ceil(total / filters.limit!)
       },
-      query: filters.query || null
+      query: filters.query || null,
+      showWebSearch: total === 0 && filters.query && filters.query.trim().length > 0
     });
   } catch (error) {
     console.error('Error searching articles:', error);
